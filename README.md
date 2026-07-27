@@ -124,31 +124,26 @@ That's it — reload and the email/password gate appears. Verified end-to-end
 against Cognito (a misconfigured client returns Cognito's own error in the
 form), so once the ids are real, sign-in works.
 
-## Data backend setup (Phase 2 — new AppSync API, secured by your pool)
+## Data backend setup (Phase 2 — AppSync API, secured by your pool)
 
-This requires the Amplify CLI and your AWS account. It is **not** provisioned
-yet (no `amplify` CLI is installed on this machine).
+Provisioned via a self-contained **CloudFormation template** you upload in the
+AWS console — no Amplify CLI, no local credentials. Full steps in
+[`infra/README.md`](infra/README.md). In short:
 
-```bash
-npm install -g @aws-amplify/cli
-amplify configure                 # one-time: link an AWS account/IAM user
-amplify init                      # initialize the Amplify project here
+1. `node infra/generate-template.mjs` (already generated:
+   `infra/minutebook-appsync.json`).
+2. CloudFormation console → **Create stack** → upload that template → acknowledge
+   IAM → **Submit**. Provisions 1 AppSync API + 8 DynamoDB tables + 40 resolvers,
+   wired to your existing Cognito pool.
+3. Copy the stack's **`GraphQLApiUrl`** output into the Amplify env var
+   `MB_APPSYNC_ENDPOINT` (and your local `js/config.js` → `appsync.endpoint`).
 
-# Point Amplify at your EXISTING user pool instead of creating a new one:
-amplify import auth               # choose your existing Cognito user pool
-
-amplify add api                   # GraphQL, "Amazon Cognito User Pool" auth;
-                                  #   replace the generated
-                                  #   amplify/backend/api/<name>/schema.graphql
-                                  #   with schema/schema.graphql from this repo
-amplify push                      # provisions AppSync + DynamoDB
-```
-
-After `push`, copy the AppSync endpoint (Amplify output, or AppSync console)
-into `js/config.js` → `appsync.endpoint`. On next load, data persistence
-switches from localStorage to DynamoDB automatically — every GraphQL call is
-authorized with the signed-in user's Cognito session (`authMode: 'userPool'`),
-which is why the schema uses `@auth(rules: [{ allow: owner }])`.
+On next load the app auto-switches from localStorage to DynamoDB — every GraphQL
+call is authorized with the signed-in user's Cognito session
+(`authMode: 'userPool'`). The API grants access to any authenticated pool user
+(single-user tool); see `infra/README.md` for how to add per-owner isolation
+later. `schema/schema.graphql` remains the human-readable model reference; the
+deployable schema is generated into the template.
 
 ## Deploying (AWS Amplify Hosting)
 

@@ -1,0 +1,1546 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Minute Book — AppSync + DynamoDB backend (Cognito user-pool auth).",
+  "Parameters": {
+    "UserPoolId": {
+      "Type": "String",
+      "Default": "us-east-1_iQ2q3z7ep",
+      "Description": "Existing Cognito user pool id to authorize the API."
+    },
+    "CognitoRegion": {
+      "Type": "String",
+      "Default": "us-east-1",
+      "Description": "Region of the Cognito user pool."
+    }
+  },
+  "Resources": {
+    "GraphQLApi": {
+      "Type": "AWS::AppSync::GraphQLApi",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-api"
+        },
+        "AuthenticationType": "AMAZON_COGNITO_USER_POOLS",
+        "UserPoolConfig": {
+          "UserPoolId": {
+            "Ref": "UserPoolId"
+          },
+          "AwsRegion": {
+            "Ref": "CognitoRegion"
+          },
+          "DefaultAction": "ALLOW"
+        }
+      }
+    },
+    "GraphQLSchema": {
+      "Type": "AWS::AppSync::GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Definition": "type CorpInfo {\n  id: ID!\n  legalName: String\n  tradeNames: [String]\n  corporationNumber: String\n  businessNumber: String\n  jurisdiction: String\n  incorporationDate: AWSDate\n  registeredOffice: String\n  mailingAddress: String\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype CorpInfoConnection {\n  items: [CorpInfo!]!\n  nextToken: String\n}\ninput CreateCorpInfoInput {\n  id: ID\n  legalName: String\n  tradeNames: [String]\n  corporationNumber: String\n  businessNumber: String\n  jurisdiction: String\n  incorporationDate: AWSDate\n  registeredOffice: String\n  mailingAddress: String\n}\ninput UpdateCorpInfoInput {\n  id: ID!\n  legalName: String\n  tradeNames: [String]\n  corporationNumber: String\n  businessNumber: String\n  jurisdiction: String\n  incorporationDate: AWSDate\n  registeredOffice: String\n  mailingAddress: String\n}\ninput DeleteCorpInfoInput {\n  id: ID!\n}\n\ntype Director {\n  id: ID!\n  name: String\n  address: String\n  titles: [String]\n  appointmentDate: AWSDate\n  isSoleDirector: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype DirectorConnection {\n  items: [Director!]!\n  nextToken: String\n}\ninput CreateDirectorInput {\n  id: ID\n  name: String\n  address: String\n  titles: [String]\n  appointmentDate: AWSDate\n  isSoleDirector: Boolean\n}\ninput UpdateDirectorInput {\n  id: ID!\n  name: String\n  address: String\n  titles: [String]\n  appointmentDate: AWSDate\n  isSoleDirector: Boolean\n}\ninput DeleteDirectorInput {\n  id: ID!\n}\n\ntype ShareClass {\n  id: ID!\n  className: String\n  authorized: Int\n  issued: Int\n  rightsRestrictions: String\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype ShareClassConnection {\n  items: [ShareClass!]!\n  nextToken: String\n}\ninput CreateShareClassInput {\n  id: ID\n  className: String\n  authorized: Int\n  issued: Int\n  rightsRestrictions: String\n}\ninput UpdateShareClassInput {\n  id: ID!\n  className: String\n  authorized: Int\n  issued: Int\n  rightsRestrictions: String\n}\ninput DeleteShareClassInput {\n  id: ID!\n}\n\ntype Shareholder {\n  id: ID!\n  name: String\n  shareClassId: ID\n  quantity: Int\n  certificateNumber: String\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype ShareholderConnection {\n  items: [Shareholder!]!\n  nextToken: String\n}\ninput CreateShareholderInput {\n  id: ID\n  name: String\n  shareClassId: ID\n  quantity: Int\n  certificateNumber: String\n}\ninput UpdateShareholderInput {\n  id: ID!\n  name: String\n  shareClassId: ID\n  quantity: Int\n  certificateNumber: String\n}\ninput DeleteShareholderInput {\n  id: ID!\n}\n\ntype BankingInfo {\n  id: ID!\n  bankName: String\n  branchAddress: String\n  signingOfficers: [String]\n  accountTypes: [String]\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype BankingInfoConnection {\n  items: [BankingInfo!]!\n  nextToken: String\n}\ninput CreateBankingInfoInput {\n  id: ID\n  bankName: String\n  branchAddress: String\n  signingOfficers: [String]\n  accountTypes: [String]\n}\ninput UpdateBankingInfoInput {\n  id: ID!\n  bankName: String\n  branchAddress: String\n  signingOfficers: [String]\n  accountTypes: [String]\n}\ninput DeleteBankingInfoInput {\n  id: ID!\n}\n\ntype AnnualResolution {\n  id: ID!\n  fiscalYearCovered: String\n  financialStatementsApproved: Boolean\n  directorContinuation: Boolean\n  dividendDeclared: Boolean\n  dividendAmount: Float\n  dividendClass: String\n  auditWaiver: Boolean\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype AnnualResolutionConnection {\n  items: [AnnualResolution!]!\n  nextToken: String\n}\ninput CreateAnnualResolutionInput {\n  id: ID\n  fiscalYearCovered: String\n  financialStatementsApproved: Boolean\n  directorContinuation: Boolean\n  dividendDeclared: Boolean\n  dividendAmount: Float\n  dividendClass: String\n  auditWaiver: Boolean\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput UpdateAnnualResolutionInput {\n  id: ID!\n  fiscalYearCovered: String\n  financialStatementsApproved: Boolean\n  directorContinuation: Boolean\n  dividendDeclared: Boolean\n  dividendAmount: Float\n  dividendClass: String\n  auditWaiver: Boolean\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput DeleteAnnualResolutionInput {\n  id: ID!\n}\n\ntype AdHocResolution {\n  id: ID!\n  type: String\n  customTitle: String\n  date: AWSDate\n  details: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype AdHocResolutionConnection {\n  items: [AdHocResolution!]!\n  nextToken: String\n}\ninput CreateAdHocResolutionInput {\n  id: ID\n  type: String\n  customTitle: String\n  date: AWSDate\n  details: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput UpdateAdHocResolutionInput {\n  id: ID!\n  type: String\n  customTitle: String\n  date: AWSDate\n  details: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput DeleteAdHocResolutionInput {\n  id: ID!\n}\n\ntype DocumentRegistryEntry {\n  id: ID!\n  documentId: ID\n  documentType: String\n  periodCovered: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype DocumentRegistryEntryConnection {\n  items: [DocumentRegistryEntry!]!\n  nextToken: String\n}\ninput CreateDocumentRegistryEntryInput {\n  id: ID\n  documentId: ID\n  documentType: String\n  periodCovered: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput UpdateDocumentRegistryEntryInput {\n  id: ID!\n  documentId: ID\n  documentType: String\n  periodCovered: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput DeleteDocumentRegistryEntryInput {\n  id: ID!\n}\n\ntype Query {\n  getCorpInfo(id: ID!): CorpInfo\n  listCorpInfos(limit: Int, nextToken: String): CorpInfoConnection\n  getDirector(id: ID!): Director\n  listDirectors(limit: Int, nextToken: String): DirectorConnection\n  getShareClass(id: ID!): ShareClass\n  listShareClasses(limit: Int, nextToken: String): ShareClassConnection\n  getShareholder(id: ID!): Shareholder\n  listShareholders(limit: Int, nextToken: String): ShareholderConnection\n  getBankingInfo(id: ID!): BankingInfo\n  listBankingInfos(limit: Int, nextToken: String): BankingInfoConnection\n  getAnnualResolution(id: ID!): AnnualResolution\n  listAnnualResolutions(limit: Int, nextToken: String): AnnualResolutionConnection\n  getAdHocResolution(id: ID!): AdHocResolution\n  listAdHocResolutions(limit: Int, nextToken: String): AdHocResolutionConnection\n  getDocumentRegistryEntry(id: ID!): DocumentRegistryEntry\n  listDocumentRegistryEntries(limit: Int, nextToken: String): DocumentRegistryEntryConnection\n}\n\ntype Mutation {\n  createCorpInfo(input: CreateCorpInfoInput!): CorpInfo\n  updateCorpInfo(input: UpdateCorpInfoInput!): CorpInfo\n  deleteCorpInfo(input: DeleteCorpInfoInput!): CorpInfo\n  createDirector(input: CreateDirectorInput!): Director\n  updateDirector(input: UpdateDirectorInput!): Director\n  deleteDirector(input: DeleteDirectorInput!): Director\n  createShareClass(input: CreateShareClassInput!): ShareClass\n  updateShareClass(input: UpdateShareClassInput!): ShareClass\n  deleteShareClass(input: DeleteShareClassInput!): ShareClass\n  createShareholder(input: CreateShareholderInput!): Shareholder\n  updateShareholder(input: UpdateShareholderInput!): Shareholder\n  deleteShareholder(input: DeleteShareholderInput!): Shareholder\n  createBankingInfo(input: CreateBankingInfoInput!): BankingInfo\n  updateBankingInfo(input: UpdateBankingInfoInput!): BankingInfo\n  deleteBankingInfo(input: DeleteBankingInfoInput!): BankingInfo\n  createAnnualResolution(input: CreateAnnualResolutionInput!): AnnualResolution\n  updateAnnualResolution(input: UpdateAnnualResolutionInput!): AnnualResolution\n  deleteAnnualResolution(input: DeleteAnnualResolutionInput!): AnnualResolution\n  createAdHocResolution(input: CreateAdHocResolutionInput!): AdHocResolution\n  updateAdHocResolution(input: UpdateAdHocResolutionInput!): AdHocResolution\n  deleteAdHocResolution(input: DeleteAdHocResolutionInput!): AdHocResolution\n  createDocumentRegistryEntry(input: CreateDocumentRegistryEntryInput!): DocumentRegistryEntry\n  updateDocumentRegistryEntry(input: UpdateDocumentRegistryEntryInput!): DocumentRegistryEntry\n  deleteDocumentRegistryEntry(input: DeleteDocumentRegistryEntryInput!): DocumentRegistryEntry\n}\n\nschema {\n  query: Query\n  mutation: Mutation\n}\n"
+      }
+    },
+    "AppSyncDynamoRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "appsync.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "ddb-access",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "CorpInfoTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "DirectorTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ShareClassTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ShareholderTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "BankingInfoTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "AnnualResolutionTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "AdHocResolutionTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "DocumentRegistryEntryTable",
+                        "Arn"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "CorpInfoTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-CorpInfo"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "CorpInfoDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "CorpInfo",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "CorpInfoTable"
+          }
+        }
+      }
+    },
+    "CorpInfogetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getCorpInfo",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "CorpInfoDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "CorpInfolistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listCorpInfos",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "CorpInfoDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "CorpInfocreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createCorpInfo",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "CorpInfoDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "CorpInfoupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateCorpInfo",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "CorpInfoDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  const keys = Object.keys(input);\n  for (let i = 0; i < keys.length; i++) {\n    const k = keys[i];\n    if (k === 'id') { continue; }\n    names['#f' + i] = k;\n    values[':v' + i] = input[k];\n    sets.push('#f' + i + ' = :v' + i);\n  }\n  names['#u'] = 'updatedAt';\n  values[':u'] = util.time.nowISO8601();\n  sets.push('#u = :u');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "CorpInfodelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteCorpInfo",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "CorpInfoDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DirectorTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-Director"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "DirectorDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "Director",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "DirectorTable"
+          }
+        }
+      }
+    },
+    "DirectorgetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getDirector",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DirectorDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DirectorlistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listDirectors",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DirectorDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "DirectorcreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createDirector",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DirectorDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DirectorupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateDirector",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DirectorDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  const keys = Object.keys(input);\n  for (let i = 0; i < keys.length; i++) {\n    const k = keys[i];\n    if (k === 'id') { continue; }\n    names['#f' + i] = k;\n    values[':v' + i] = input[k];\n    sets.push('#f' + i + ' = :v' + i);\n  }\n  names['#u'] = 'updatedAt';\n  values[':u'] = util.time.nowISO8601();\n  sets.push('#u = :u');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DirectordelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteDirector",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DirectorDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareClassTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-ShareClass"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "ShareClassDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "ShareClass",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "ShareClassTable"
+          }
+        }
+      }
+    },
+    "ShareClassgetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getShareClass",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareClassDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareClasslistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listShareClasses",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareClassDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "ShareClasscreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createShareClass",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareClassDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareClassupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateShareClass",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareClassDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  const keys = Object.keys(input);\n  for (let i = 0; i < keys.length; i++) {\n    const k = keys[i];\n    if (k === 'id') { continue; }\n    names['#f' + i] = k;\n    values[':v' + i] = input[k];\n    sets.push('#f' + i + ' = :v' + i);\n  }\n  names['#u'] = 'updatedAt';\n  values[':u'] = util.time.nowISO8601();\n  sets.push('#u = :u');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareClassdelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteShareClass",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareClassDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareholderTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-Shareholder"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "ShareholderDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "Shareholder",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "ShareholderTable"
+          }
+        }
+      }
+    },
+    "ShareholdergetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getShareholder",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareholderDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareholderlistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listShareholders",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareholderDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "ShareholdercreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createShareholder",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareholderDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareholderupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateShareholder",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareholderDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  const keys = Object.keys(input);\n  for (let i = 0; i < keys.length; i++) {\n    const k = keys[i];\n    if (k === 'id') { continue; }\n    names['#f' + i] = k;\n    values[':v' + i] = input[k];\n    sets.push('#f' + i + ' = :v' + i);\n  }\n  names['#u'] = 'updatedAt';\n  values[':u'] = util.time.nowISO8601();\n  sets.push('#u = :u');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareholderdelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteShareholder",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareholderDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "BankingInfoTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-BankingInfo"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "BankingInfoDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "BankingInfo",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "BankingInfoTable"
+          }
+        }
+      }
+    },
+    "BankingInfogetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getBankingInfo",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "BankingInfoDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "BankingInfolistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listBankingInfos",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "BankingInfoDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "BankingInfocreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createBankingInfo",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "BankingInfoDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "BankingInfoupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateBankingInfo",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "BankingInfoDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  const keys = Object.keys(input);\n  for (let i = 0; i < keys.length; i++) {\n    const k = keys[i];\n    if (k === 'id') { continue; }\n    names['#f' + i] = k;\n    values[':v' + i] = input[k];\n    sets.push('#f' + i + ' = :v' + i);\n  }\n  names['#u'] = 'updatedAt';\n  values[':u'] = util.time.nowISO8601();\n  sets.push('#u = :u');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "BankingInfodelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteBankingInfo",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "BankingInfoDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "AnnualResolutionTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-AnnualResolution"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "AnnualResolutionDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "AnnualResolution",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "AnnualResolutionTable"
+          }
+        }
+      }
+    },
+    "AnnualResolutiongetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getAnnualResolution",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "AnnualResolutionDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "AnnualResolutionlistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listAnnualResolutions",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "AnnualResolutionDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "AnnualResolutioncreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createAnnualResolution",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "AnnualResolutionDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "AnnualResolutionupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateAnnualResolution",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "AnnualResolutionDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  const keys = Object.keys(input);\n  for (let i = 0; i < keys.length; i++) {\n    const k = keys[i];\n    if (k === 'id') { continue; }\n    names['#f' + i] = k;\n    values[':v' + i] = input[k];\n    sets.push('#f' + i + ' = :v' + i);\n  }\n  names['#u'] = 'updatedAt';\n  values[':u'] = util.time.nowISO8601();\n  sets.push('#u = :u');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "AnnualResolutiondelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteAnnualResolution",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "AnnualResolutionDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "AdHocResolutionTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-AdHocResolution"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "AdHocResolutionDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "AdHocResolution",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "AdHocResolutionTable"
+          }
+        }
+      }
+    },
+    "AdHocResolutiongetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getAdHocResolution",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "AdHocResolutionDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "AdHocResolutionlistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listAdHocResolutions",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "AdHocResolutionDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "AdHocResolutioncreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createAdHocResolution",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "AdHocResolutionDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "AdHocResolutionupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateAdHocResolution",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "AdHocResolutionDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  const keys = Object.keys(input);\n  for (let i = 0; i < keys.length; i++) {\n    const k = keys[i];\n    if (k === 'id') { continue; }\n    names['#f' + i] = k;\n    values[':v' + i] = input[k];\n    sets.push('#f' + i + ' = :v' + i);\n  }\n  names['#u'] = 'updatedAt';\n  values[':u'] = util.time.nowISO8601();\n  sets.push('#u = :u');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "AdHocResolutiondelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteAdHocResolution",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "AdHocResolutionDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DocumentRegistryEntryTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-DocumentRegistryEntry"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "DocumentRegistryEntryDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "DocumentRegistryEntry",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "DocumentRegistryEntryTable"
+          }
+        }
+      }
+    },
+    "DocumentRegistryEntrygetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getDocumentRegistryEntry",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DocumentRegistryEntryDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DocumentRegistryEntrylistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listDocumentRegistryEntries",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DocumentRegistryEntryDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "DocumentRegistryEntrycreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createDocumentRegistryEntry",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DocumentRegistryEntryDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DocumentRegistryEntryupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateDocumentRegistryEntry",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DocumentRegistryEntryDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  const keys = Object.keys(input);\n  for (let i = 0; i < keys.length; i++) {\n    const k = keys[i];\n    if (k === 'id') { continue; }\n    names['#f' + i] = k;\n    values[':v' + i] = input[k];\n    sets.push('#f' + i + ' = :v' + i);\n  }\n  names['#u'] = 'updatedAt';\n  values[':u'] = util.time.nowISO8601();\n  sets.push('#u = :u');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DocumentRegistryEntrydelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteDocumentRegistryEntry",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DocumentRegistryEntryDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    }
+  },
+  "Outputs": {
+    "GraphQLApiUrl": {
+      "Description": "AppSync GraphQL endpoint — put this in MB_APPSYNC_ENDPOINT / config.appsync.endpoint.",
+      "Value": {
+        "Fn::GetAtt": [
+          "GraphQLApi",
+          "GraphQLUrl"
+        ]
+      }
+    },
+    "GraphQLApiId": {
+      "Description": "AppSync API id.",
+      "Value": {
+        "Fn::GetAtt": [
+          "GraphQLApi",
+          "ApiId"
+        ]
+      }
+    },
+    "Region": {
+      "Description": "Region the API is deployed in (for config.appsync.region).",
+      "Value": {
+        "Ref": "AWS::Region"
+      }
+    }
+  }
+}
