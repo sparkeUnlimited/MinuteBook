@@ -1,0 +1,22 @@
+# Amplify Hosting build spec.
+#
+# This is a no-framework static site: the only "build" step is generating
+# js/config.js from environment variables (Cognito / AppSync ids), then
+# publishing the repo root as-is. See scripts/gen-config.mjs.
+#
+# Set these in the Amplify console (App settings -> Environment variables):
+#   MB_REGION, MB_USER_POOL_ID, MB_USER_POOL_CLIENT_ID
+#   MB_APPSYNC_ENDPOINT (optional), MB_APPSYNC_REGION (optional)
+version: 1
+frontend:
+  phases:
+    build:
+      commands:
+        - node scripts/gen-config.mjs
+  artifacts:
+    # Publish the repo root (index.html lives here).
+    baseDirectory: /
+    files:
+      - '**/*'
+  cache:
+    paths: []
