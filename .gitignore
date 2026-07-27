@@ -1,0 +1,15 @@
+# Local environment config (contains your Cognito / AppSync IDs).
+# Copy js/config.example.js -> js/config.js and fill it in.
+js/config.js
+
+# Amplify CLI local state (generated when you provision the backend).
+amplify/\#current-cloud-backend
+amplify/.config/local-*
+amplify/mock-data
+amplify/backend/amplify-meta.json
+amplify/backend/awscloudformation
+amplify/backend/.temp
+aws-exports.js
+
+# OS / editor cruft
+.DS_Store

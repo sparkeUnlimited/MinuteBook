@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Minute Book Generator</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- PDF generation. jsPDF's doc.html() rasterizes via html2canvas, so both
+       are required (html2canvas must load first). jsPDF exposes window.jspdf. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <h2>Minute Book</h2>
+        <span id="backend-status" class="backend-status">● …</span>
+      </div>
+      <nav id="nav" class="nav"></nav>
+      <div class="sidebar-foot">
+        <p>Ontario corporate records</p>
+      </div>
+    </aside>
+    <main id="main" class="main"></main>
+  </div>
+
+  <!-- App code (ES modules). Served over http(s); see README for running. -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

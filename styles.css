@@ -1,0 +1,239 @@
+/* Minute Book Generator — styles.
+   Layout: fixed sidebar nav + scrollable main panel. Print stylesheet at the
+   bottom (Phase 7) hides UI chrome and shows only the active document. */
+
+:root {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --ink: #1c2530;
+  --muted: #6b7684;
+  --border: #e2e6ea;
+  --border-strong: #b9c0c8;
+  --accent: #1f6feb;
+  --accent-ink: #ffffff;
+  --danger: #c0392b;
+  --ok: #1e8e50;
+  --shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --radius: 10px;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+
+/* --- Sidebar --- */
+.sidebar {
+  background: #10141a;
+  color: #cdd5df;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.brand { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
+.brand h2 { margin: 0; font-size: 17px; color: #fff; letter-spacing: 0.02em; }
+.backend-status { font-size: 10px; color: #7c8697; white-space: nowrap; }
+.backend-status.amplify { color: #46b06e; }
+.backend-status.local { color: #d9a441; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a {
+  color: #cdd5df;
+  text-decoration: none;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: background .12s, color .12s;
+}
+.nav a:hover { background: #1b222c; color: #fff; }
+.nav a.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+.sidebar-foot { margin-top: auto; font-size: 11px; color: #58616e; padding-top: 16px; }
+
+/* --- Main --- */
+.main { padding: 28px 32px 80px; max-width: 900px; }
+.loading, .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+
+.section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 12px; }
+.section-head h1 { margin: 0; font-size: 24px; }
+
+/* --- Cards / forms --- */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.card.locked { opacity: 0.92; background: #fbfbfc; }
+.row-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.row-head h3 { margin: 0; font-size: 16px; }
+.lock-badge { font-size: 11px; color: var(--muted); background: #eef0f2; padding: 3px 8px; border-radius: 999px; }
+
+.field { margin-bottom: 14px; }
+.field > label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; color: #374150; }
+.req { color: var(--danger); }
+.field-help { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+
+input[type="text"], input[type="date"], input[type="number"], textarea, select {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--ink);
+}
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+input:disabled, textarea:disabled, select:disabled { background: #f2f3f5; color: var(--muted); }
+textarea { resize: vertical; }
+
+.switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.switch input { width: 18px; height: 18px; }
+
+.multiselect { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.chk input { width: 16px; height: 16px; }
+.multi-freeform { flex: 1 1 200px; min-width: 160px; }
+
+.card-actions { display: flex; gap: 10px; margin-top: 8px; }
+
+/* --- Buttons --- */
+.btn {
+  font: inherit; font-size: 14px; font-weight: 600;
+  padding: 9px 16px; border-radius: 8px; border: 1px solid transparent; cursor: pointer;
+  background: #eef0f2; color: var(--ink);
+}
+.btn:hover { filter: brightness(0.97); }
+.btn:disabled { opacity: 0.6; cursor: default; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-danger { background: #fff; color: var(--danger); border-color: #e6c3bf; }
+.btn-doc { background: #fff; border: 1px solid var(--border-strong); color: var(--ink); }
+
+/* --- Groups (shares) --- */
+.group { margin-bottom: 28px; }
+.group-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.group-head h2 { font-size: 18px; margin: 0; }
+
+/* --- Document generation blocks --- */
+.doc-block { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.doc-block-title { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
+.doc-actions, .doc-actions-wrap { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.doc-gate { color: var(--muted); font-size: 13px; font-style: italic; }
+
+/* --- Registry --- */
+.registry-table, .doc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.registry-table th, .registry-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.registry-table th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.pill { display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #eef0f2; color: var(--muted); }
+.pill-ok { background: #e2f3e9; color: var(--ok); }
+.alert { padding: 12px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; }
+.alert-overdue { background: #fdecea; color: var(--danger); border: 1px solid #f3c2bd; }
+
+/* --- Toast --- */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: #1c2530; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.25); opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; z-index: 100;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-success { background: #14663b; }
+.toast-error { background: #a4271b; }
+
+/* --- Login gate --- */
+.login-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(160deg, #10141a, #1b2530);
+  padding: 20px;
+}
+.login-card {
+  background: var(--panel); border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+  padding: 32px 28px; width: 100%; max-width: 380px;
+}
+.login-card h1 { margin: 0 0 4px; font-size: 22px; }
+.login-sub { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+.login-card label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 5px; color: #374150; }
+.login-card input { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; font-size: 15px; }
+.login-btn { width: 100%; margin-top: 18px; padding: 11px; font-size: 15px; }
+.login-note { font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+.login-err {
+  background: #fdecea; color: var(--danger); border: 1px solid #f3c2bd;
+  padding: 9px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 4px;
+}
+
+.sidebar-foot .who { color: #9aa4b2; font-size: 11px; margin: 0 0 8px; word-break: break-all; }
+.signout {
+  background: transparent; border: 1px solid #2b333e; color: #cdd5df;
+  font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 7px; cursor: pointer;
+}
+.signout:hover { background: #1b222c; color: #fff; }
+
+/* ==========================================================================
+   DOCUMENT styling — used both on-screen (pdf-render-host) and by jsPDF.
+   Constrained to ~720px so doc.html() paginates predictably.
+   ========================================================================== */
+.pdf-render-host {
+  position: fixed; left: -10000px; top: 0; width: 720px; background: #fff;
+}
+.resolution-doc {
+  width: 720px; background: #fff; color: #111; padding: 8px 4px;
+  font-family: "Times New Roman", Georgia, serif; font-size: 12.5px; line-height: 1.5;
+}
+.resolution-doc .doc-head { text-align: center; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 16px; }
+.resolution-doc .doc-corp { font-size: 19px; margin: 0 0 4px; letter-spacing: 0.02em; }
+.resolution-doc .doc-meta { font-size: 11px; color: #444; margin: 0; }
+.resolution-doc .doc-title { font-size: 15px; text-align: center; margin: 14px 0 2px; text-decoration: underline; }
+.resolution-doc .doc-subtitle { text-align: center; font-size: 12px; color: #333; margin: 0 0 16px; font-style: italic; }
+.resolution-doc .doc-h3 { font-size: 13px; margin: 16px 0 6px; }
+.resolution-doc p { margin: 0 0 10px; text-align: justify; }
+.resolution-doc .doc-list { margin: 0 0 12px; padding-left: 22px; }
+.resolution-doc .doc-list > li { margin-bottom: 8px; }
+.resolution-doc .doc-list ul { margin: 6px 0; }
+.resolution-doc .doc-table { border: 1px solid #333; margin: 6px 0 14px; font-size: 11.5px; }
+.resolution-doc .doc-table th, .resolution-doc .doc-table td { border: 1px solid #999; padding: 5px 8px; text-align: left; }
+.resolution-doc .doc-table th { background: #eee; }
+.resolution-doc .doc-table .num { text-align: right; }
+.resolution-doc .doc-sign { margin-top: 34px; }
+.resolution-doc .doc-dateline { margin-bottom: 30px; }
+.resolution-doc .sig-line { display: inline-block; min-width: 260px; }
+.resolution-doc .sig-rule { display: block; border-top: 1px solid #111; margin-bottom: 4px; }
+.resolution-doc .sig-name { display: block; font-weight: bold; }
+.resolution-doc .sig-role { display: block; font-size: 11px; color: #444; }
+
+/* --- Responsive (iPad / iPhone) --- */
+@media (max-width: 768px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .brand { width: 100%; margin-bottom: 8px; }
+  .nav { flex-direction: row; flex-wrap: wrap; }
+  .nav a { padding: 7px 10px; font-size: 13px; }
+  .sidebar-foot { display: none; }
+  .main { padding: 20px 16px 80px; }
+}
+
+/* ==========================================================================
+   PRINT (Phase 7) — hide all UI chrome, show only the rendered document.
+   Doubles as the Cmd+P fallback if jsPDF ever mis-lays-out.
+   ========================================================================== */
+@media print {
+  .sidebar, .section-head, .card-actions, .doc-actions, .doc-actions-wrap,
+  .doc-block-title, .btn, #toast, .backend-status { display: none !important; }
+  .app { display: block; }
+  .main { max-width: 100%; padding: 0; }
+  .pdf-render-host { position: static !important; left: 0 !important; }
+  .resolution-doc { width: 100%; padding: 0; }
+  @page { margin: 20mm; }
+}

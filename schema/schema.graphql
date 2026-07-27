@@ -1,0 +1,85 @@
+# Minute Book Generator — AppSync / DynamoDB schema
+# Provision with the Amplify CLI (see README "Backend setup").
+# Each @model becomes a DynamoDB table + generated CRUD queries/mutations.
+# Auth: Cognito user pool (single user). No public API key — this is durable
+# legal data and access must be tied to a real login.
+
+type CorpInfo @model @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  legalName: String!
+  tradeNames: [String]
+  corporationNumber: String!
+  businessNumber: String
+  jurisdiction: String!
+  incorporationDate: AWSDate!
+  registeredOffice: String!
+  mailingAddress: String
+  updatedAt: AWSDateTime!
+}
+
+type Director @model @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  name: String!
+  address: String!
+  titles: [String!]!
+  appointmentDate: AWSDate!
+  isSoleDirector: Boolean!
+}
+
+type ShareClass @model @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  className: String!
+  authorized: Int!
+  issued: Int!
+  rightsRestrictions: String
+}
+
+type Shareholder @model @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  name: String!
+  shareClassId: ID!
+  quantity: Int!
+  certificateNumber: String
+}
+
+type BankingInfo @model @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  bankName: String!
+  branchAddress: String!
+  signingOfficers: [String!]!
+  accountTypes: [String!]!
+}
+
+type AnnualResolution @model @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  fiscalYearCovered: String!
+  financialStatementsApproved: Boolean!
+  directorContinuation: Boolean!
+  dividendDeclared: Boolean!
+  dividendAmount: Float
+  dividendClass: String
+  auditWaiver: Boolean!
+  dateSigned: AWSDate
+  pdfGenerated: Boolean!
+  createdAt: AWSDateTime!
+}
+
+type AdHocResolution @model @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  type: String!
+  customTitle: String
+  date: AWSDate!
+  details: String!
+  dateSigned: AWSDate
+  pdfGenerated: Boolean!
+  createdAt: AWSDateTime!
+}
+
+type DocumentRegistryEntry @model @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  documentId: ID!
+  documentType: String!
+  periodCovered: String!
+  dateSigned: AWSDate
+  pdfGenerated: Boolean!
+}
