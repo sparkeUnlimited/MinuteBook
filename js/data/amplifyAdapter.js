@@ -29,6 +29,20 @@ const SELECTION = {
   DocumentRegistryEntry: 'id documentId documentType periodCovered dateSigned pdfGenerated',
 };
 
+// Explicit plurals for list queries — must match the field names in the
+// AppSync schema (infra/generate-template.mjs), which uses proper English
+// pluralization (ShareClass -> ShareClasses, not ShareClasss).
+const PLURAL = {
+  CorpInfo: 'CorpInfos',
+  Director: 'Directors',
+  ShareClass: 'ShareClasses',
+  Shareholder: 'Shareholders',
+  BankingInfo: 'BankingInfos',
+  AnnualResolution: 'AnnualResolutions',
+  AdHocResolution: 'AdHocResolutions',
+  DocumentRegistryEntry: 'DocumentRegistryEntries',
+};
+
 let clientPromise = null;
 
 async function getClient() {
@@ -43,7 +57,7 @@ async function getClient() {
 }
 
 function listQuery(model) {
-  return `query List${model} { list${model}s { items { ${SELECTION[model]} } } }`;
+  return `query List${model} { list${PLURAL[model]} { items { ${SELECTION[model]} } } }`;
 }
 function getQuery(model) {
   return `query Get${model}($id: ID!) { get${model}(id: $id) { ${SELECTION[model]} } }`;
@@ -69,7 +83,7 @@ export const amplifyAdapter = {
 
   async list(model) {
     const data = await run(listQuery(model));
-    return data[`list${model}s`].items;
+    return data[`list${PLURAL[model]}`].items;
   },
   async get(model, id) {
     const data = await run(getQuery(model), { id });
