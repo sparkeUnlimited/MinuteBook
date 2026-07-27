@@ -12,8 +12,8 @@
 export default {
   // Your existing Cognito user pool (reused for this app's login).
   region: 'us-east-1',
-  userPoolId: 'us-east-1_iQ2q3z7ep',            // e.g. 'us-east-1_ABC123DEF'
-  userPoolClientId: '1kebmtlgnvlb1taim1eapd0nav',      // an app client WITHOUT a client secret (public web client)
+  userPoolId: '',            // e.g. 'us-east-1_ABC123DEF'
+  userPoolClientId: '',      // an app client WITHOUT a client secret (public web client)
 
   // The AppSync GraphQL API for minute-book data. Provision with the Amplify
   // CLI using schema/schema.graphql and Cognito user-pool auth (see README),
