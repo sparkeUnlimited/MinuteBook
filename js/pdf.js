@@ -48,15 +48,30 @@ export async function buildPdf(html, filename) {
 }
 
 function safeName(name) {
-  return (name || 'document').replace(/[^\w.\- ]+/g, '_').replace(/\s+/g, '_');
+  return (name || 'document')
+    .replace(/[^\w.\- ]+/g, ' ')   // drop punctuation (em dashes etc.)
+    .replace(/[\s_]+/g, '_')       // collapse whitespace/underscores to one _
+    .replace(/^_+|_+$/g, '');      // trim leading/trailing _
 }
 
-// Try Web Share (iOS/iPadOS) first, fall back to download.
+// iOS/iPadOS only. On those, the Web Share sheet is how you save a file to the
+// Files app / iCloud Drive. On macOS Safari (and every desktop browser) the
+// share sheet has no clean "save to file", so we use a plain download instead.
+// iPadOS reports as "MacIntel", so detect it via touch points.
+function isAppleMobile() {
+  const ua = navigator.userAgent || '';
+  const iPhoneOrIPod = /iPhone|iPod/.test(ua);
+  const iPad = /iPad/.test(ua)
+    || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+  return iPhoneOrIPod || iPad;
+}
+
+// Save to file: Web Share on iOS/iPadOS, plain download everywhere else.
 export async function saveOrShare(blob, filename) {
   const fname = safeName(filename).endsWith('.pdf') ? safeName(filename) : `${safeName(filename)}.pdf`;
   const file = new File([blob], fname, { type: 'application/pdf' });
 
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (isAppleMobile() && navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: fname });
       return 'shared';
