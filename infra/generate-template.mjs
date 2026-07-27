@@ -146,17 +146,18 @@ export function request(ctx) {
   const names = {};
   const values = {};
   const sets = [];
-  const keys = Object.keys(input);
-  for (let i = 0; i < keys.length; i++) {
-    const k = keys[i];
-    if (k === 'id') { continue; }
-    names['#f' + i] = k;
-    values[':v' + i] = input[k];
-    sets.push('#f' + i + ' = :v' + i);
-  }
-  names['#u'] = 'updatedAt';
-  values[':u'] = util.time.nowISO8601();
-  sets.push('#u = :u');
+  Object.keys(input).forEach((k) => {
+    if (k !== 'id') {
+      const nk = '#f' + sets.length;
+      const vk = ':v' + sets.length;
+      names[nk] = k;
+      values[vk] = input[k];
+      sets.push(nk + ' = ' + vk);
+    }
+  });
+  names['#updatedAt'] = 'updatedAt';
+  values[':updatedAt'] = util.time.nowISO8601();
+  sets.push('#updatedAt = :updatedAt');
   return {
     operation: 'UpdateItem',
     key: util.dynamodb.toMapValues({ id }),
