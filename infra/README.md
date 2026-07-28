@@ -14,8 +14,13 @@ This folder provisions the cloud backend for the Minute Book app:
   - **Read** → any signed-in user, **except** banking details and the ISC
     register (dates of birth), which are limited to `Executives`/`Admin`/`Finance`
     (so `Users` can't see them).
-- **1 S3 bucket** for uploaded files + compiled minute books, and a **Cognito
-  Identity Pool** for browser S3 access scoped to `files/*` and `minute-book/*`.
+- **Multi-tenant:** every model except `CorpInfo` carries a `corpId` (the
+  `CorpInfo` id it belongs to) and is listed via a `byCorp` GSI, so all three
+  corporations run from one backend (and it's SaaS-ready). `CorpInfo` lists all
+  corps to populate the app's corp switcher.
+- **1 S3 bucket** for uploaded files + compiled minute books, keyed by corp
+  (`{corpId}/files/…`, `{corpId}/minute-book/…`), and a **Cognito Identity
+  Pool** for browser S3 access.
 
 Files:
 
@@ -41,11 +46,13 @@ and data are preserved (v2 keeps all v1 logical IDs and only adds to them).
 3. Parameters are pre-filled (pool id, app client id, region) → **Next**.
 4. Re-check **"I acknowledge that AWS CloudFormation might create IAM
    resources"** → **Next**.
-5. Review the **change set**: it should be all **Add** (new tables, S3, Identity
-   Pool, resolvers) and **Modify** (the GraphQL schema) — **no Delete/Replace on
-   your existing `*Table` resources**. If you see a Replace on a data table,
-   stop and tell me.
-6. **Submit** and wait for **UPDATE_COMPLETE**.
+5. Review the **change set**: expect **Add** (new tables, S3, Identity Pool,
+   resolvers), **Modify** on your existing `v1` tables (they each gain the
+   `byCorp` GSI — a non-destructive change), and **Modify** on the schema.
+   **No Delete/Replace on your `*Table` resources** — if you see a Replace on a
+   data table, stop and tell me.
+6. **Submit** and wait for **UPDATE_COMPLETE** (adding a GSI to existing tables
+   can make this take a few extra minutes).
 7. Open the **Outputs** tab and copy `FilesBucketName` and `IdentityPoolId`
    (the `GraphQLApiUrl` is unchanged from v1).
 
@@ -56,6 +63,27 @@ full access — nothing to do. Just make sure:
 - Your **accountant** is in the **`Finance`** group (to upload financial docs and
   read banking/financials).
 - Anyone who should be view-only is in **`Users`** (they won't see banking/ISC).
+
+## Migrate existing v1 data to multi-corp (assign to Spark-E)
+
+After the update, your existing records have no `corpId`, so they won't appear
+until backfilled. Treat your existing single corp as **Spark-E**:
+
+1. In the app (or the DynamoDB console), confirm the existing `CorpInfo` record —
+   edit its name to Spark-E if needed. Note its `id` (that's Spark-E's corpId).
+2. Backfill `corpId` onto the other existing records. For a handful of records,
+   just add a `corpId` string attribute to each item in the DynamoDB console.
+   For more, run the helper in **AWS CloudShell** (it has your credentials):
+
+   ```bash
+   npm i @aws-sdk/client-dynamodb @aws-sdk/lib-dynamodb
+   node backfill-corpid.mjs minutebook-backend
+   ```
+
+   (With one `CorpInfo` record it auto-targets that id; otherwise pass the
+   corpId as a second arg. It's idempotent.)
+3. Create the **Holding** and **Numbered** corps as new corporations in the app
+   (each becomes its own `CorpInfo` with its own `corpId`).
 
 ## Point the app at it (Amplify env vars)
 

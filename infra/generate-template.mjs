@@ -4,8 +4,13 @@
 //   node infra/generate-template.mjs
 //     -> writes infra/minutebook-appsync.json
 //
+// Multi-tenant: every model except CorpInfo carries a `corpId` (the tenant
+// key = the CorpInfo id it belongs to) and is listed via a `byCorp` GSI, so
+// the app serves all 3 corporations from one backend (and is SaaS-ready).
+//
 // Design:
-//   - One DynamoDB table per model (PK = id, on-demand billing).
+//   - One DynamoDB table per model (PK = id, on-demand billing); corp-scoped
+//     tables add a `byCorp` GSI (PK = corpId).
 //   - One AppSync API with Cognito user-pool auth. Writes are gated by Cognito
 //     group via @aws_auth (minute book = Executives + Admin; Document uploads =
 //     Executives + Admin + Finance). Reads are open to any authenticated user
@@ -24,8 +29,12 @@ import { writeFileSync } from 'node:fs';
 // Field types mirror schema/schema.graphql. `createdAt` / `updatedAt` are
 // server-managed (set by resolvers) and excluded from input types.
 const MODELS = {
+  // CorpInfo is the tenant root: one record per corporation, its `id` IS the
+  // corpId every other model references. Not itself corp-scoped (listed
+  // unfiltered to populate the corp switcher).
   CorpInfo: {
     plural: 'CorpInfos',
+    tenantScoped: false,
     fields: {
       legalName: 'String', tradeNames: '[String]', corporationNumber: 'String',
       businessNumber: 'String', jurisdiction: 'String', incorporationDate: 'AWSDate',
@@ -152,14 +161,22 @@ const DEFAULT_WRITE_GROUPS = ['Executives', 'Admin'];
 
 // --- GraphQL SDL -----------------------------------------------------------
 
+// Every model except CorpInfo carries a corpId (the tenant key) and is listed
+// by corp via the `byCorp` GSI.
+const isScoped = (model, def) => def.tenantScoped !== false && model !== 'CorpInfo';
+
 function typeBlock(model, def) {
+  const scoped = isScoped(model, def);
   const lines = [`type ${model} {`, '  id: ID!'];
+  if (scoped) lines.push('  corpId: ID!');
   for (const [name, t] of Object.entries(def.fields)) lines.push(`  ${name}: ${t}`);
   lines.push('  createdAt: AWSDateTime', '  updatedAt: AWSDateTime', '}');
   lines.push(`type ${model}Connection {`, `  items: [${model}!]!`, '  nextToken: String', '}');
+  const corpIn = scoped ? '  corpId: ID' : '';
   const inputFields = Object.entries(def.fields).map(([n, t]) => `  ${n}: ${t}`).join('\n');
-  lines.push(`input Create${model}Input {`, '  id: ID', inputFields, '}');
-  lines.push(`input Update${model}Input {`, '  id: ID!', inputFields, '}');
+  const createBody = [corpIn, inputFields].filter(Boolean).join('\n');
+  lines.push(`input Create${model}Input {`, '  id: ID', createBody, '}');
+  lines.push(`input Update${model}Input {`, '  id: ID!', createBody, '}');
   lines.push(`input Delete${model}Input {`, '  id: ID!', '}');
   return lines.join('\n');
 }
@@ -170,7 +187,9 @@ function buildSchemaSDL() {
     const ra = d.readGroups
       ? ` @aws_auth(cognito_groups: [${d.readGroups.map((g) => `"${g}"`).join(', ')}])`
       : '';
-    return `  get${m}(id: ID!): ${m}${ra}\n  list${d.plural}(limit: Int, nextToken: String): ${m}Connection${ra}`;
+    // Corp-scoped lists require corpId; CorpInfo lists all corps.
+    const listArgs = isScoped(m, d) ? 'corpId: ID!, limit: Int, nextToken: String' : 'limit: Int, nextToken: String';
+    return `  get${m}(id: ID!): ${m}${ra}\n  list${d.plural}(${listArgs}): ${m}Connection${ra}`;
   }).join('\n');
   const mutations = Object.entries(MODELS).map(([m, d]) => {
     const groups = (d.writeGroups || DEFAULT_WRITE_GROUPS).map((g) => `"${g}"`).join(', ');
@@ -195,6 +214,27 @@ export function response(ctx) {
   list: `import { util } from '@aws-appsync/utils';
 export function request(ctx) {
   return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };
+}
+export function response(ctx) {
+  if (ctx.error) util.error(ctx.error.message, ctx.error.type);
+  return { items: ctx.result.items, nextToken: ctx.result.nextToken };
+}
+`,
+  // Corp-scoped list: query the byCorp GSI so each corp reads only its own rows.
+  listByCorp: `import { util } from '@aws-appsync/utils';
+export function request(ctx) {
+  const corpId = ctx.args.corpId;
+  const limit = ctx.args.limit || 1000;
+  return {
+    operation: 'Query',
+    index: 'byCorp',
+    query: {
+      expression: 'corpId = :c',
+      expressionValues: util.dynamodb.toMapValues({ ':c': corpId }),
+    },
+    limit: limit,
+    nextToken: ctx.args.nextToken,
+  };
 }
 export function response(ctx) {
   if (ctx.error) util.error(ctx.error.message, ctx.error.type);
@@ -290,8 +330,12 @@ resources.GraphQLSchema = {
   },
 };
 
-// IAM role AppSync assumes to reach the tables.
-const tableArns = Object.keys(MODELS).map((m) => ({ 'Fn::GetAtt': [`${m}Table`, 'Arn'] }));
+// IAM role AppSync assumes to reach the tables (and their GSIs).
+const tableArns = [];
+Object.keys(MODELS).forEach((m) => {
+  tableArns.push({ 'Fn::GetAtt': [`${m}Table`, 'Arn'] });
+  tableArns.push({ 'Fn::Sub': `\${${m}Table.Arn}/index/*` });
+});
 resources.AppSyncDynamoRole = {
   Type: 'AWS::IAM::Role',
   Properties: {
@@ -329,15 +373,23 @@ const OPS = [
 ];
 
 for (const [model, def] of Object.entries(MODELS)) {
-  resources[`${model}Table`] = {
-    Type: 'AWS::DynamoDB::Table',
-    Properties: {
-      TableName: { 'Fn::Sub': `\${AWS::StackName}-${model}` },
-      BillingMode: 'PAY_PER_REQUEST',
-      AttributeDefinitions: [{ AttributeName: 'id', AttributeType: 'S' }],
-      KeySchema: [{ AttributeName: 'id', KeyType: 'HASH' }],
-    },
+  const scoped = isScoped(model, def);
+  const tableProps = {
+    TableName: { 'Fn::Sub': `\${AWS::StackName}-${model}` },
+    BillingMode: 'PAY_PER_REQUEST',
+    AttributeDefinitions: [{ AttributeName: 'id', AttributeType: 'S' }],
+    KeySchema: [{ AttributeName: 'id', KeyType: 'HASH' }],
   };
+  if (scoped) {
+    // byCorp GSI so each corp's records are queried, not scanned across tenants.
+    tableProps.AttributeDefinitions.push({ AttributeName: 'corpId', AttributeType: 'S' });
+    tableProps.GlobalSecondaryIndexes = [{
+      IndexName: 'byCorp',
+      KeySchema: [{ AttributeName: 'corpId', KeyType: 'HASH' }],
+      Projection: { ProjectionType: 'ALL' },
+    }];
+  }
+  resources[`${model}Table`] = { Type: 'AWS::DynamoDB::Table', Properties: tableProps };
 
   resources[`${model}DataSource`] = {
     Type: 'AWS::AppSync::DataSource',
@@ -354,6 +406,8 @@ for (const [model, def] of Object.entries(MODELS)) {
   };
 
   for (const op of OPS) {
+    // Corp-scoped models list via the byCorp GSI; CorpInfo scans all corps.
+    const code = (op.key === 'list' && scoped) ? CODE.listByCorp : op.code;
     resources[`${model}${op.key}Resolver`] = {
       Type: 'AWS::AppSync::Resolver',
       DependsOn: 'GraphQLSchema',
@@ -363,7 +417,7 @@ for (const [model, def] of Object.entries(MODELS)) {
         FieldName: op.field(model, def),
         DataSourceName: { 'Fn::GetAtt': [`${model}DataSource`, 'Name'] },
         Runtime: GJS,
-        Code: op.code,
+        Code: code,
       },
     };
   }
@@ -374,8 +428,8 @@ for (const [model, def] of Object.entries(MODELS)) {
 // reference them by name. Users must be members of the appropriate group.
 
 // --- S3 bucket for uploaded files + compiled minute books -------------------
-//   files/{year}/{category}/...   files/corporate/{category}/...   (uploads)
-//   minute-book/{year}/...        (compiled, locked annual minute-book PDFs)
+//   {corpId}/files/{year}/{category}/...   {corpId}/files/corporate/...  (uploads)
+//   {corpId}/minute-book/{year}/...        (compiled, locked minute-book PDFs)
 resources.FilesBucket = {
   Type: 'AWS::S3::Bucket',
   Properties: {
@@ -439,20 +493,23 @@ resources.FilesAuthRole = {
       PolicyName: 'files-s3',
       PolicyDocument: {
         Version: '2012-10-17',
+        // Keys are corp-prefixed: {corpId}/files/... and {corpId}/minute-book/...
+        // Both current users are trusted with all corps, so access spans corps.
+        // (Future SaaS: scope these per tenant via the identity's allowed corps.)
         Statement: [
           {
             Effect: 'Allow',
             Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
             Resource: [
-              { 'Fn::Sub': '${FilesBucket.Arn}/files/*' },
-              { 'Fn::Sub': '${FilesBucket.Arn}/minute-book/*' },
+              { 'Fn::Sub': '${FilesBucket.Arn}/*/files/*' },
+              { 'Fn::Sub': '${FilesBucket.Arn}/*/minute-book/*' },
             ],
           },
           {
             Effect: 'Allow',
             Action: ['s3:ListBucket'],
             Resource: { 'Fn::GetAtt': ['FilesBucket', 'Arn'] },
-            Condition: { StringLike: { 's3:prefix': ['files/*', 'minute-book/*'] } },
+            Condition: { StringLike: { 's3:prefix': ['*/files/*', '*/minute-book/*'] } },
           },
         ],
       },
@@ -519,5 +576,6 @@ writeFileSync(out, JSON.stringify(template, null, 2) + '\n');
 const resourceCount = Object.keys(resources).length;
 console.log(`[generate-template] wrote infra/minutebook-appsync.json`);
 console.log(`  models: ${Object.keys(MODELS).length}, resolvers: ${Object.keys(MODELS).length * OPS.length}, total resources: ${resourceCount}`);
+console.log(`  multi-tenant: corpId + byCorp GSI on all models except CorpInfo`);
 console.log(`  write groups: Executives/Admin (+Finance for Documents); read-restricted: BankingInfo, SignificantControlPerson`);
 console.log(`  groups are managed in Cognito (not created here)`);
