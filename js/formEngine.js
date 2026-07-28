@@ -19,10 +19,10 @@ const nextId = () => `f${++_uid}`;
 
 function optionList(field, context) {
   if (field.optionsFrom && context && context[field.optionsFrom]) {
-    // Options derived from another group's records (e.g. shareClassId).
+    // Options derived from other records (e.g. shareClassId, or corps).
     return context[field.optionsFrom].map((r) => ({
       value: r.id,
-      label: r.className || r.name || r.id,
+      label: r.className || r.name || r.legalName || r.id,
     }));
   }
   return (field.options || []).map((o) => ({ value: o, label: o }));

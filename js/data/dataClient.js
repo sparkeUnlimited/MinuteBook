@@ -37,8 +37,8 @@ export const data = {
   async backendName() {
     return (await adapter()).name;
   },
-  async list(model) {
-    return (await adapter()).list(model);
+  async list(model, corpId) {
+    return (await adapter()).list(model, corpId);
   },
   async get(model, id) {
     return (await adapter()).get(model, id);

@@ -60,6 +60,20 @@ body {
 
 .sidebar-foot { margin-top: auto; font-size: 11px; color: #58616e; padding-top: 16px; }
 
+/* Corp switcher */
+.corp-switcher { margin-bottom: 16px; }
+.cs-label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #7c8697; margin-bottom: 5px; }
+.cs-row { display: flex; gap: 6px; }
+.corp-select {
+  flex: 1; min-width: 0; background: #1b222c; color: #fff;
+  border: 1px solid #2b333e; border-radius: 7px; padding: 8px; font-size: 13px;
+}
+.btn-add-corp {
+  background: #1b222c; color: #cdd5df; border: 1px solid #2b333e;
+  border-radius: 7px; padding: 8px 11px; cursor: pointer; font-size: 13px; white-space: nowrap;
+}
+.btn-add-corp:hover { background: #232c38; color: #fff; }
+
 /* --- Main --- */
 .main { padding: 28px 32px 80px; max-width: 900px; }
 .loading, .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }

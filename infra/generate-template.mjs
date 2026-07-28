@@ -4,16 +4,23 @@
 //   node infra/generate-template.mjs
 //     -> writes infra/minutebook-appsync.json
 //
+// Multi-tenant: every model except CorpInfo carries a `corpId` (the tenant
+// key = the CorpInfo id it belongs to) and is listed via a `byCorp` GSI, so
+// the app serves all 3 corporations from one backend (and is SaaS-ready).
+//
 // Design:
-//   - One DynamoDB table per model (PK = id, on-demand billing).
-//   - One AppSync API with Cognito user-pool auth. Reads are open to any
-//     authenticated user; writes are gated by Cognito group via @aws_auth
-//     (minute book = Owners only; FinancialDocument = Owners + Accountants).
+//   - One DynamoDB table per model (PK = id, on-demand billing); corp-scoped
+//     tables add a `byCorp` GSI (PK = corpId).
+//   - One AppSync API with Cognito user-pool auth. Writes are gated by Cognito
+//     group via @aws_auth (minute book = Executives + Admin; Document uploads =
+//     Executives + Admin + Finance). Reads are open to any authenticated user
+//     except banking + the ISC register, which are limited to Exec/Admin/Finance.
 //   - Generic APPSYNC_JS resolvers for get/list/create/update/delete, reused
 //     across every model (identical code, different data source).
-//   - Cognito groups (Owners, Accountants), an S3 bucket for financial files
-//     (folder per year), and a Cognito Identity Pool so the browser can
-//     upload/download to S3 with temporary, prefix-scoped credentials.
+//   - Groups (Executives/Finance/Admin/Users) are managed in Cognito, not here.
+//   - An S3 bucket for uploaded files + compiled minute books, and a Cognito
+//     Identity Pool so the browser can read/write S3 with temporary,
+//     prefix-scoped credentials.
 //
 // Regenerate and commit the JSON whenever the model list changes.
 
@@ -22,12 +29,18 @@ import { writeFileSync } from 'node:fs';
 // Field types mirror schema/schema.graphql. `createdAt` / `updatedAt` are
 // server-managed (set by resolvers) and excluded from input types.
 const MODELS = {
+  // CorpInfo is the tenant root: one record per corporation, its `id` IS the
+  // corpId every other model references. Not itself corp-scoped (listed
+  // unfiltered to populate the corp switcher).
   CorpInfo: {
     plural: 'CorpInfos',
+    tenantScoped: false,
     fields: {
       legalName: 'String', tradeNames: '[String]', corporationNumber: 'String',
       businessNumber: 'String', jurisdiction: 'String', incorporationDate: 'AWSDate',
       registeredOffice: 'String', mailingAddress: 'String',
+      // Group structure: the parent corporation's id, if this is a subsidiary.
+      parentCorpId: 'ID',
     },
   },
   Director: {
@@ -40,17 +53,25 @@ const MODELS = {
   ShareClass: {
     plural: 'ShareClasses',
     fields: {
-      className: 'String', authorized: 'Int', issued: 'Int', rightsRestrictions: 'String',
+      // authorizedUnlimited=true means an unlimited number of authorized shares
+      // (common for Ontario corps); in that case `authorized` is ignored.
+      className: 'String', authorized: 'Int', authorizedUnlimited: 'Boolean',
+      issued: 'Int', rightsRestrictions: 'String',
     },
   },
   Shareholder: {
     plural: 'Shareholders',
     fields: {
       name: 'String', shareClassId: 'ID', quantity: 'Int', certificateNumber: 'String',
+      // If another corporation in this minute book holds these shares, its id
+      // (e.g. the holding corp owning a subsidiary). `name` mirrors its legal name.
+      shareholderCorpId: 'ID',
     },
   },
   BankingInfo: {
     plural: 'BankingInfos',
+    // Sensitive: only management + finance may read banking details.
+    readGroups: ['Executives', 'Admin', 'Finance'],
     fields: {
       bankName: 'String', branchAddress: 'String',
       signingOfficers: '[String]', accountTypes: '[String]',
@@ -79,41 +100,102 @@ const MODELS = {
       dateSigned: 'AWSDate', pdfGenerated: 'Boolean',
     },
   },
-  // Financial documents uploaded by the accountant (or owner). Metadata only —
-  // the file itself lives in S3 (see FinancialsBucket). Both Owners and
-  // Accountants may write these; everything else is Owners-only.
-  FinancialDocument: {
-    plural: 'FinancialDocuments',
-    writeGroups: ['Owners', 'Accountants'],
+  // Uploaded files (metadata only — the file lives in S3, see FilesBucket).
+  //   scope: 'year'      -> fiscalYear set (tax returns, financial statements,
+  //                         accountant package for that year)
+  //   scope: 'corporate' -> no year (articles of incorporation, certificates)
+  // Both Owners and Accountants may write these; everything else is Owners-only.
+  // Attestation captures the accountant's "these are correct" confirmation.
+  Document: {
+    plural: 'Documents',
+    writeGroups: ['Executives', 'Admin', 'Finance'],
     fields: {
-      fiscalYear: 'String', category: 'String', fileName: 'String',
-      s3Key: 'String', contentType: 'String', size: 'Int', uploadedBy: 'String',
+      scope: 'String', fiscalYear: 'String', category: 'String', title: 'String',
+      fileName: 'String', s3Key: 'String', contentType: 'String', size: 'Int',
+      uploadedBy: 'String',
+      attestationConfirmed: 'Boolean', attestationBy: 'String', attestationAt: 'AWSDateTime',
+    },
+  },
+  // Annual shareholders' meeting minutes log. status is one of
+  // 'no_updates' | 'continued_previous' | 'custom'.
+  ShareholdersMeeting: {
+    plural: 'ShareholdersMeetings',
+    fields: {
+      fiscalYear: 'String', meetingDate: 'AWSDate', status: 'String',
+      notes: 'String', dateSigned: 'AWSDate', pdfGenerated: 'Boolean',
+    },
+  },
+  // Officers register — distinct from directors.
+  Officer: {
+    plural: 'Officers',
+    fields: {
+      name: 'String', office: 'String', appointmentDate: 'AWSDate', endDate: 'AWSDate',
+    },
+  },
+  // Register of Individuals with Significant Control (Ontario transparency
+  // register requirement for private corporations since 2023).
+  SignificantControlPerson: {
+    plural: 'SignificantControlPeople',
+    // Sensitive PII (includes dates of birth): restrict reads.
+    readGroups: ['Executives', 'Admin', 'Finance'],
+    fields: {
+      name: 'String', address: 'String', dateOfBirth: 'AWSDate',
+      controlType: 'String', controlDescription: 'String',
+      controlStartDate: 'AWSDate', controlEndDate: 'AWSDate',
+    },
+  },
+  // Securities/share transfer register — a running ledger of issuances and
+  // transfers (the Shareholder model holds only current holdings).
+  ShareTransfer: {
+    plural: 'ShareTransfers',
+    fields: {
+      transferDate: 'AWSDate', shareClassId: 'ID', fromHolder: 'String',
+      toHolder: 'String', quantity: 'Int', consideration: 'Float',
+      certificateIssued: 'String', certificateCancelled: 'String', notes: 'String',
     },
   },
 };
 
-// Which Cognito groups may create/update/delete a model. Reads are open to any
-// authenticated user (the accountant sees the whole minute book, read-only).
-const DEFAULT_WRITE_GROUPS = ['Owners'];
+// Cognito group authorization. Groups are managed in the Cognito console
+// (Executives, Finance, Admin, Users) — this template references them, it does
+// NOT create them.
+//   - Writes default to Executives + Admin (management edits the minute book).
+//   - Reads are open to any authenticated user EXCEPT models that set
+//     `readGroups` (banking + ISC register), which restrict who can view them.
+const DEFAULT_WRITE_GROUPS = ['Executives', 'Admin'];
 
 // --- GraphQL SDL -----------------------------------------------------------
 
+// Every model except CorpInfo carries a corpId (the tenant key) and is listed
+// by corp via the `byCorp` GSI.
+const isScoped = (model, def) => def.tenantScoped !== false && model !== 'CorpInfo';
+
 function typeBlock(model, def) {
+  const scoped = isScoped(model, def);
   const lines = [`type ${model} {`, '  id: ID!'];
+  if (scoped) lines.push('  corpId: ID!');
   for (const [name, t] of Object.entries(def.fields)) lines.push(`  ${name}: ${t}`);
   lines.push('  createdAt: AWSDateTime', '  updatedAt: AWSDateTime', '}');
   lines.push(`type ${model}Connection {`, `  items: [${model}!]!`, '  nextToken: String', '}');
+  const corpIn = scoped ? '  corpId: ID' : '';
   const inputFields = Object.entries(def.fields).map(([n, t]) => `  ${n}: ${t}`).join('\n');
-  lines.push(`input Create${model}Input {`, '  id: ID', inputFields, '}');
-  lines.push(`input Update${model}Input {`, '  id: ID!', inputFields, '}');
+  const createBody = [corpIn, inputFields].filter(Boolean).join('\n');
+  lines.push(`input Create${model}Input {`, '  id: ID', createBody, '}');
+  lines.push(`input Update${model}Input {`, '  id: ID!', createBody, '}');
   lines.push(`input Delete${model}Input {`, '  id: ID!', '}');
   return lines.join('\n');
 }
 
 function buildSchemaSDL() {
   const types = Object.entries(MODELS).map(([m, d]) => typeBlock(m, d)).join('\n\n');
-  const queries = Object.entries(MODELS).map(([m, d]) =>
-    `  get${m}(id: ID!): ${m}\n  list${d.plural}(limit: Int, nextToken: String): ${m}Connection`).join('\n');
+  const queries = Object.entries(MODELS).map(([m, d]) => {
+    const ra = d.readGroups
+      ? ` @aws_auth(cognito_groups: [${d.readGroups.map((g) => `"${g}"`).join(', ')}])`
+      : '';
+    // Corp-scoped lists require corpId; CorpInfo lists all corps.
+    const listArgs = isScoped(m, d) ? 'corpId: ID!, limit: Int, nextToken: String' : 'limit: Int, nextToken: String';
+    return `  get${m}(id: ID!): ${m}${ra}\n  list${d.plural}(${listArgs}): ${m}Connection${ra}`;
+  }).join('\n');
   const mutations = Object.entries(MODELS).map(([m, d]) => {
     const groups = (d.writeGroups || DEFAULT_WRITE_GROUPS).map((g) => `"${g}"`).join(', ');
     const a = ` @aws_auth(cognito_groups: [${groups}])`;
@@ -137,6 +219,27 @@ export function response(ctx) {
   list: `import { util } from '@aws-appsync/utils';
 export function request(ctx) {
   return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };
+}
+export function response(ctx) {
+  if (ctx.error) util.error(ctx.error.message, ctx.error.type);
+  return { items: ctx.result.items, nextToken: ctx.result.nextToken };
+}
+`,
+  // Corp-scoped list: query the byCorp GSI so each corp reads only its own rows.
+  listByCorp: `import { util } from '@aws-appsync/utils';
+export function request(ctx) {
+  const corpId = ctx.args.corpId;
+  const limit = ctx.args.limit || 1000;
+  return {
+    operation: 'Query',
+    index: 'byCorp',
+    query: {
+      expression: 'corpId = :c',
+      expressionValues: util.dynamodb.toMapValues({ ':c': corpId }),
+    },
+    limit: limit,
+    nextToken: ctx.args.nextToken,
+  };
 }
 export function response(ctx) {
   if (ctx.error) util.error(ctx.error.message, ctx.error.type);
@@ -232,8 +335,12 @@ resources.GraphQLSchema = {
   },
 };
 
-// IAM role AppSync assumes to reach the tables.
-const tableArns = Object.keys(MODELS).map((m) => ({ 'Fn::GetAtt': [`${m}Table`, 'Arn'] }));
+// IAM role AppSync assumes to reach the tables (and their GSIs).
+const tableArns = [];
+Object.keys(MODELS).forEach((m) => {
+  tableArns.push({ 'Fn::GetAtt': [`${m}Table`, 'Arn'] });
+  tableArns.push({ 'Fn::Sub': `\${${m}Table.Arn}/index/*` });
+});
 resources.AppSyncDynamoRole = {
   Type: 'AWS::IAM::Role',
   Properties: {
@@ -271,15 +378,23 @@ const OPS = [
 ];
 
 for (const [model, def] of Object.entries(MODELS)) {
-  resources[`${model}Table`] = {
-    Type: 'AWS::DynamoDB::Table',
-    Properties: {
-      TableName: { 'Fn::Sub': `\${AWS::StackName}-${model}` },
-      BillingMode: 'PAY_PER_REQUEST',
-      AttributeDefinitions: [{ AttributeName: 'id', AttributeType: 'S' }],
-      KeySchema: [{ AttributeName: 'id', KeyType: 'HASH' }],
-    },
+  const scoped = isScoped(model, def);
+  const tableProps = {
+    TableName: { 'Fn::Sub': `\${AWS::StackName}-${model}` },
+    BillingMode: 'PAY_PER_REQUEST',
+    AttributeDefinitions: [{ AttributeName: 'id', AttributeType: 'S' }],
+    KeySchema: [{ AttributeName: 'id', KeyType: 'HASH' }],
   };
+  if (scoped) {
+    // byCorp GSI so each corp's records are queried, not scanned across tenants.
+    tableProps.AttributeDefinitions.push({ AttributeName: 'corpId', AttributeType: 'S' });
+    tableProps.GlobalSecondaryIndexes = [{
+      IndexName: 'byCorp',
+      KeySchema: [{ AttributeName: 'corpId', KeyType: 'HASH' }],
+      Projection: { ProjectionType: 'ALL' },
+    }];
+  }
+  resources[`${model}Table`] = { Type: 'AWS::DynamoDB::Table', Properties: tableProps };
 
   resources[`${model}DataSource`] = {
     Type: 'AWS::AppSync::DataSource',
@@ -296,6 +411,8 @@ for (const [model, def] of Object.entries(MODELS)) {
   };
 
   for (const op of OPS) {
+    // Corp-scoped models list via the byCorp GSI; CorpInfo scans all corps.
+    const code = (op.key === 'list' && scoped) ? CODE.listByCorp : op.code;
     resources[`${model}${op.key}Resolver`] = {
       Type: 'AWS::AppSync::Resolver',
       DependsOn: 'GraphQLSchema',
@@ -305,40 +422,23 @@ for (const [model, def] of Object.entries(MODELS)) {
         FieldName: op.field(model, def),
         DataSourceName: { 'Fn::GetAtt': [`${model}DataSource`, 'Name'] },
         Runtime: GJS,
-        Code: op.code,
+        Code: code,
       },
     };
   }
 }
 
-// --- Cognito groups (roles) ------------------------------------------------
-// Added to the EXISTING user pool. Owners = full access; Accountants =
-// read-only minute book + manage financial documents. You add users to these
-// groups in the Cognito console.
-resources.OwnersGroup = {
-  Type: 'AWS::Cognito::UserPoolGroup',
-  Properties: {
-    GroupName: 'Owners',
-    UserPoolId: { Ref: 'UserPoolId' },
-    Description: 'Full read/write access to the minute book.',
-    Precedence: 1,
-  },
-};
-resources.AccountantsGroup = {
-  Type: 'AWS::Cognito::UserPoolGroup',
-  Properties: {
-    GroupName: 'Accountants',
-    UserPoolId: { Ref: 'UserPoolId' },
-    Description: 'Read-only on the minute book; can manage financial documents.',
-    Precedence: 10,
-  },
-};
+// NOTE: Cognito groups (Executives, Finance, Admin, Users) are managed in the
+// Cognito console, not here. The GraphQL schema's @aws_auth directives
+// reference them by name. Users must be members of the appropriate group.
 
-// --- S3 bucket for financial files (folder per year: financials/{year}/) ----
-resources.FinancialsBucket = {
+// --- S3 bucket for uploaded files + compiled minute books -------------------
+//   {corpId}/files/{year}/{category}/...   {corpId}/files/corporate/...  (uploads)
+//   {corpId}/minute-book/{year}/...        (compiled, locked minute-book PDFs)
+resources.FilesBucket = {
   Type: 'AWS::S3::Bucket',
   Properties: {
-    BucketName: { 'Fn::Sub': '${AWS::StackName}-financials-${AWS::AccountId}' },
+    BucketName: { 'Fn::Sub': '${AWS::StackName}-files-${AWS::AccountId}' },
     BucketEncryption: {
       ServerSideEncryptionConfiguration: [
         { ServerSideEncryptionByDefault: { SSEAlgorithm: 'AES256' } },
@@ -364,9 +464,9 @@ resources.FinancialsBucket = {
 };
 
 // --- Cognito Identity Pool: exchanges a signed-in user-pool token for
-//     temporary AWS creds scoped to the financials/ prefix, so the browser can
-//     upload/download directly to S3 (via the Amplify Storage library). --------
-resources.FinancialsIdentityPool = {
+//     temporary AWS creds scoped to the files/ + minute-book/ prefixes, so the
+//     browser can upload/download to S3 (via the Amplify Storage library). -----
+resources.IdentityPool = {
   Type: 'AWS::Cognito::IdentityPool',
   Properties: {
     IdentityPoolName: { 'Fn::Sub': '${AWS::StackName}_identitypool' },
@@ -379,7 +479,7 @@ resources.FinancialsIdentityPool = {
   },
 };
 
-resources.FinancialsAuthRole = {
+resources.FilesAuthRole = {
   Type: 'AWS::IAM::Role',
   Properties: {
     AssumeRolePolicyDocument: {
@@ -389,26 +489,32 @@ resources.FinancialsAuthRole = {
         Principal: { Federated: 'cognito-identity.amazonaws.com' },
         Action: 'sts:AssumeRoleWithWebIdentity',
         Condition: {
-          StringEquals: { 'cognito-identity.amazonaws.com:aud': { Ref: 'FinancialsIdentityPool' } },
+          StringEquals: { 'cognito-identity.amazonaws.com:aud': { Ref: 'IdentityPool' } },
           'ForAnyValue:StringLike': { 'cognito-identity.amazonaws.com:amr': 'authenticated' },
         },
       }],
     },
     Policies: [{
-      PolicyName: 'financials-s3',
+      PolicyName: 'files-s3',
       PolicyDocument: {
         Version: '2012-10-17',
+        // Keys are corp-prefixed: {corpId}/files/... and {corpId}/minute-book/...
+        // Both current users are trusted with all corps, so access spans corps.
+        // (Future SaaS: scope these per tenant via the identity's allowed corps.)
         Statement: [
           {
             Effect: 'Allow',
             Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-            Resource: { 'Fn::Sub': '${FinancialsBucket.Arn}/financials/*' },
+            Resource: [
+              { 'Fn::Sub': '${FilesBucket.Arn}/*/files/*' },
+              { 'Fn::Sub': '${FilesBucket.Arn}/*/minute-book/*' },
+            ],
           },
           {
             Effect: 'Allow',
             Action: ['s3:ListBucket'],
-            Resource: { 'Fn::GetAtt': ['FinancialsBucket', 'Arn'] },
-            Condition: { StringLike: { 's3:prefix': ['financials/*'] } },
+            Resource: { 'Fn::GetAtt': ['FilesBucket', 'Arn'] },
+            Condition: { StringLike: { 's3:prefix': ['*/files/*', '*/minute-book/*'] } },
           },
         ],
       },
@@ -416,11 +522,11 @@ resources.FinancialsAuthRole = {
   },
 };
 
-resources.FinancialsIdentityPoolRoleAttachment = {
+resources.IdentityPoolRoleAttachment = {
   Type: 'AWS::Cognito::IdentityPoolRoleAttachment',
   Properties: {
-    IdentityPoolId: { Ref: 'FinancialsIdentityPool' },
-    Roles: { authenticated: { 'Fn::GetAtt': ['FinancialsAuthRole', 'Arn'] } },
+    IdentityPoolId: { Ref: 'IdentityPool' },
+    Roles: { authenticated: { 'Fn::GetAtt': ['FilesAuthRole', 'Arn'] } },
   },
 };
 
@@ -454,13 +560,13 @@ const template = {
       Description: 'AppSync API id.',
       Value: { 'Fn::GetAtt': ['GraphQLApi', 'ApiId'] },
     },
-    FinancialsBucketName: {
-      Description: 'S3 bucket for financial files — set as MB_S3_BUCKET.',
-      Value: { Ref: 'FinancialsBucket' },
+    FilesBucketName: {
+      Description: 'S3 bucket for uploaded files + minute books — set as MB_S3_BUCKET.',
+      Value: { Ref: 'FilesBucket' },
     },
     IdentityPoolId: {
       Description: 'Cognito Identity Pool id — set as MB_IDENTITY_POOL_ID.',
-      Value: { Ref: 'FinancialsIdentityPool' },
+      Value: { Ref: 'IdentityPool' },
     },
     Region: {
       Description: 'Region the API is deployed in (for config.appsync.region).',
@@ -475,4 +581,6 @@ writeFileSync(out, JSON.stringify(template, null, 2) + '\n');
 const resourceCount = Object.keys(resources).length;
 console.log(`[generate-template] wrote infra/minutebook-appsync.json`);
 console.log(`  models: ${Object.keys(MODELS).length}, resolvers: ${Object.keys(MODELS).length * OPS.length}, total resources: ${resourceCount}`);
-console.log(`  added: Owners/Accountants groups, S3 bucket, Cognito Identity Pool + auth role`);
+console.log(`  multi-tenant: corpId + byCorp GSI on all models except CorpInfo`);
+console.log(`  write groups: Executives/Admin (+Finance for Documents); read-restricted: BankingInfo, SignificantControlPerson`);
+console.log(`  groups are managed in Cognito (not created here)`);
