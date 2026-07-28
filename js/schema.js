@@ -189,6 +189,11 @@ export const SECTIONS = {
     label: 'Documents',
     view: 'documents', // custom view — file uploads
   },
+
+  'minute-book': {
+    label: 'Annual Minute Book',
+    view: 'minute-book', // custom view — compile + store the locked yearly PDF
+  },
 };
 
 // Sidebar nav grouped into logical sections. `label: null` = ungrouped (top).
@@ -196,7 +201,7 @@ export const NAV_GROUPS = [
   { label: null, items: ['overview'] },
   { label: 'Corporate Structure', items: ['corp-info', 'directors', 'officers', 'shares'] },
   { label: 'Annual Updates', items: ['annual', 'shareholders-meeting', 'adhoc'] },
-  { label: 'Records & Documents', items: ['banking', 'documents'] },
+  { label: 'Records & Documents', items: ['banking', 'documents', 'minute-book'] },
 ];
 
 export const NAV_ORDER = NAV_GROUPS.flatMap((g) => g.items);

@@ -11,8 +11,8 @@ import {
 import {
   renderFieldset, readRecord, validateRecord, wireConditionals,
 } from './formEngine.js';
-import { documentsFor, signatureFor } from './documents.js';
-import { generateAndSave } from './pdf.js';
+import { documentsFor, signatureFor, compileMinuteBook, MINUTE_BOOK_CATEGORY } from './documents.js';
+import { generateAndSave, buildPdf, saveOrShare } from './pdf.js';
 import { captureSignature } from './signaturePad.js';
 import { esc, fmtDate } from '../templates/_helpers.js';
 import { currentRoute, navigate, onRoute, start } from './router.js';
@@ -702,6 +702,113 @@ async function deleteDoc(id) {
   } catch (err) { toast(`Couldn't delete: ${err.message}`, 'error'); }
 }
 
+// --- Annual Minute Book view ------------------------------------------------
+
+// Years that have any recorded activity, newest first (for the year picker).
+function knownYears() {
+  const years = new Set();
+  const grab = (v) => { const m = String(v || '').match(/\d{4}/); if (m) years.add(m[0]); };
+  store.AnnualResolution.forEach((a) => grab(a.fiscalYearCovered));
+  store.ShareholdersMeeting.forEach((m) => grab(m.fiscalYear));
+  store.Document.forEach((doc) => grab(doc.fiscalYear));
+  store.AdHocResolution.forEach((r) => grab(r.date));
+  return [...years].sort().reverse();
+}
+
+function renderMinuteBook() {
+  const years = knownYears();
+  const books = store.Document.filter((doc) => doc.category === MINUTE_BOOK_CATEGORY);
+
+  const bookRows = books.length ? books
+    .slice()
+    .sort((a, b) => String(b.fiscalYear || '').localeCompare(String(a.fiscalYear || '')))
+    .map((b) => `
+      <tr>
+        <td>FY ${esc(b.fiscalYear || '—')}</td>
+        <td>
+          <div class="doc-desc">${esc(b.description || b.fileName || '—')}</div>
+          <div class="doc-fname">${esc(b.fileName || '')}</div>
+        </td>
+        <td>${esc(fmtDate(String(b.createdAt || '').slice(0, 10)))}</td>
+        <td class="doc-cell-actions">
+          <button class="btn btn-doc" data-dl="${esc(b.id)}">Download</button>
+          <button class="btn btn-danger" data-del="${esc(b.id)}">Delete</button>
+        </td>
+      </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">No minute books compiled yet.</td></tr>';
+
+  $main.innerHTML = `
+    ${sectionHeader(SECTIONS['minute-book'])}
+    <p class="intro">Compile everything recorded for a fiscal year — corporate info, registers,
+    signed resolutions and minutes, and the index of uploaded documents — into a single locked PDF,
+    stored in that year's own folder in secure storage.</p>
+    <form class="card" id="mb-form">
+      <div class="field">
+        <label for="mb-year">Fiscal Year</label>
+        <input id="mb-year" type="text" list="mb-years" placeholder="e.g. 2025" value="${esc(years[0] || '')}" />
+        <datalist id="mb-years">${years.map((y) => `<option value="${esc(y)}"></option>`).join('')}</datalist>
+      </div>
+      <div class="card-actions">
+        <button type="submit" class="btn btn-primary" id="mb-generate">📕 Compile, Lock &amp; Store</button>
+      </div>
+      <p class="field-help">The PDF is permission-locked (view/print, no editing) and uploaded to
+      <code>minute-book/&lt;year&gt;/</code> for this corporation. You'll also get a copy to save locally.</p>
+    </form>
+    <h3 class="doc-h3">Stored minute books</h3>
+    <table class="registry-table">
+      <thead><tr><th>Year</th><th>Document</th><th>Compiled</th><th></th></tr></thead>
+      <tbody>${bookRows}</tbody>
+    </table>
+  `;
+
+  document.getElementById('mb-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    handleMinuteBook();
+  });
+  $main.querySelectorAll('[data-dl]').forEach((b) => b.addEventListener('click', () => downloadDoc(b.getAttribute('data-dl'))));
+  $main.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => deleteDoc(b.getAttribute('data-del'))));
+}
+
+async function handleMinuteBook() {
+  const fy = document.getElementById('mb-year').value.trim();
+  if (!/^\d{4}$/.test(fy)) { toast('Enter a 4-digit fiscal year.', 'error'); return; }
+  const btn = document.getElementById('mb-generate');
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Compiling…';
+  try {
+    const { html, label } = compileMinuteBook(fy);
+    const fname = `Annual_Minute_Book_FY${fy}.pdf`;
+    const blob = await buildPdf(html, fname, { locked: true });
+
+    // Store in the year's own minute-book folder for this corporation.
+    const corpId = store.activeCorpId;
+    const key = `${corpId}/minute-book/${fy}/${Date.now()}-${fname}`;
+    const file = new File([blob], fname, { type: 'application/pdf' });
+    await storage.upload(key, file);
+
+    const email = (await authEnabled()) ? await currentEmail().catch(() => null) : null;
+    await saveRecord('Document', {
+      scope: 'year', fiscalYear: fy, category: MINUTE_BOOK_CATEGORY,
+      title: label, description: label,
+      fileName: fname, s3Key: key, contentType: 'application/pdf', size: blob.size,
+      uploadedBy: email || 'local',
+      attestationConfirmed: false, attestationBy: null, attestationAt: null,
+    });
+
+    // Also hand the user a copy (share sheet on iPad, download elsewhere).
+    const disposition = await saveOrShare(blob, fname);
+    toast(disposition === 'cancelled'
+      ? 'Minute book stored in the cloud (local save cancelled).'
+      : 'Minute book compiled, locked, and stored.', 'success');
+    renderMinuteBook();
+  } catch (err) {
+    console.error(err);
+    toast(`Couldn't compile the minute book: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = prev;
+  }
+}
+
 // --- top-level render ------------------------------------------------------
 
 function render(route) {
@@ -723,6 +830,7 @@ function render(route) {
   }
 
   if (section.view === 'documents') return renderDocuments();
+  if (section.view === 'minute-book') return renderMinuteBook();
   if (section.groups) return renderGroups(route, section);
   if (section.repeatable) return renderRepeatable(route, section);
   return renderSingle(route, section);

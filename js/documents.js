@@ -10,6 +10,30 @@ export function signatureFor(docKey) {
   return (store.Signature || []).find((s) => s.docKey === docKey) || null;
 }
 
+export const MINUTE_BOOK_CATEGORY = 'Annual Minute Book';
+
+// Assemble the compiled Annual Minute Book for a fiscal year.
+// Returns { html, label } — pure composition over the store.
+export function compileMinuteBook(fiscalYear) {
+  const d = templateData();
+  const fy = String(fiscalYear);
+  const yearMatch = (v) => String(v || '').includes(fy);
+
+  const annual = store.AnnualResolution.find((a) => yearMatch(a.fiscalYearCovered)) || null;
+  const meeting = store.ShareholdersMeeting.find((m) => yearMatch(m.fiscalYear)) || null;
+  const adhocs = store.AdHocResolution.filter((r) => String(r.date || '').startsWith(fy));
+  const yearDocs = store.Document.filter((doc) =>
+    doc.scope === 'year' && yearMatch(doc.fiscalYear) && doc.category !== MINUTE_BOOK_CATEGORY);
+
+  const signatures = {};
+  for (const s of store.Signature) signatures[s.docKey] = s;
+
+  return {
+    html: T.annualMinuteBook(d, { fiscalYear: fy, annual, meeting, adhocs, yearDocs, signatures }),
+    label: `Annual Minute Book — FY ${fy}`,
+  };
+}
+
 // Assemble the flat data object every template consumes. Scoped stores already
 // hold only the active corp's records; `corp` is the active corporation.
 export function templateData() {

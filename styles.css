@@ -215,6 +215,18 @@ textarea { resize: vertical; }
 /* embedded signature image in generated documents */
 .resolution-doc .sig-img { display: block; max-height: 60px; max-width: 260px; margin-bottom: 2px; }
 
+/* --- Annual Minute Book (compiled) --- */
+.mb-cover { text-align: center; padding: 120px 0 90px; }
+.mb-cover-kicker { font-size: 12px; letter-spacing: 0.25em; text-transform: uppercase; color: #555; margin: 0 0 18px; }
+.mb-cover-title { font-size: 26px; margin: 0 0 8px; }
+.mb-cover-sub { font-size: 15px; font-style: italic; margin: 0 0 26px; }
+.mb-cover-meta { font-size: 11px; color: #444; line-height: 1.7; }
+.mb-part { margin-top: 28px; border-top: 3px double #111; padding-top: 14px; page-break-before: always; }
+.mb-part-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; margin: 0 0 12px; }
+/* nested full documents keep their content styling but drop the outer frame */
+.mb-book .resolution-doc { width: auto; padding: 0; }
+.mb-book .resolution-doc .doc-head { border-bottom-width: 1px; }
+
 /* --- Toast --- */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
