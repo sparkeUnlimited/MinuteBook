@@ -61,7 +61,7 @@ export function organizationalResolution(data) {
         and execute all such documents as may be necessary to give effect to these resolutions.</li>
     </ol>
 
-    ${signatureBlock(director, corp.incorporationDate)}
+    ${signatureBlock(director, corp.incorporationDate, data.signature)}
   `;
   return wrapDoc(body);
 }

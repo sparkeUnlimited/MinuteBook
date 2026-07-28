@@ -34,17 +34,23 @@ export function docHeader(corp) {
     </header>`;
 }
 
-// Signature block for the sole director (or first director).
-export function signatureBlock(director, dateSigned) {
-  const name = esc(director?.name || '[Director Name]');
-  const dateLine = dateSigned
-    ? `Dated the ${esc(fmtDate(dateSigned))}.`
+// Signature block for the sole director (or first director). If a captured
+// signature is supplied ({ name, dataUrl, signedDate }), its image is embedded
+// above the line and its date is used.
+export function signatureBlock(director, dateSigned, signature) {
+  const name = esc(signature?.signerName || director?.name || '[Director Name]');
+  const effDate = signature?.signedDate || dateSigned;
+  const dateLine = effDate
+    ? `Dated the ${esc(fmtDate(effDate))}.`
     : `Dated the ______ day of ____________________, 20____.`;
+  const sigImg = signature?.dataUrl
+    ? `<img class="sig-img" src="${signature.dataUrl}" alt="Signature" />` : '';
   return `
     <div class="doc-sign">
       <p class="doc-dateline">${dateLine}</p>
       <div class="sig">
         <div class="sig-line">
+          ${sigImg}
           <span class="sig-rule"></span>
           <span class="sig-name">${name}</span>
           <span class="sig-role">Director</span>

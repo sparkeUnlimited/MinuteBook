@@ -5,6 +5,11 @@
 import { store, single, activeCorp } from './state.js';
 import * as T from '../templates/index.js';
 
+// The stored e-signature for a document, or null.
+export function signatureFor(docKey) {
+  return (store.Signature || []).find((s) => s.docKey === docKey) || null;
+}
+
 // Assemble the flat data object every template consumes. Scoped stores already
 // hold only the active corp's records; `corp` is the active corporation.
 export function templateData() {
@@ -27,7 +32,8 @@ export function documentsFor(sectionKey, record) {
     case 'corp-info':
       return [{
         id: 'organizational', label: 'Organizational Resolution',
-        build: () => T.organizationalResolution(d),
+        docKey: 'organizational', signable: true,
+        build: () => T.organizationalResolution({ ...d, signature: signatureFor('organizational') }),
         registryType: 'Organizational Resolution',
         periodCovered: 'Incorporation',
       }];
@@ -59,24 +65,42 @@ export function documentsFor(sectionKey, record) {
         registryType: 'Banking Resolution',
         periodCovered: 'Current',
       }];
-    case 'annual':
+    case 'annual': {
       if (!record) return [];
+      const docKey = `annual:${record.id}`;
       return [{
         id: `annual-${record.id}`, label: `Annual Resolution — FY ${record.fiscalYearCovered || '—'}`,
-        build: () => T.annualResolution(d, record),
+        docKey, signable: true,
+        build: () => T.annualResolution({ ...d, signature: signatureFor(docKey) }, record),
         registryType: 'Annual Resolution',
         periodCovered: `FY ${record.fiscalYearCovered || '—'}`,
         recordModel: 'AnnualResolution', recordId: record.id,
       }];
-    case 'adhoc':
+    }
+    case 'shareholders-meeting': {
       if (!record) return [];
+      const docKey = `shareholders:${record.id}`;
+      return [{
+        id: `shmeeting-${record.id}`, label: `Shareholders' Meeting — FY ${record.fiscalYear || '—'}`,
+        docKey, signable: true,
+        build: () => T.shareholdersMeeting({ ...d, signature: signatureFor(docKey) }, record),
+        registryType: "Shareholders' Meeting Minutes",
+        periodCovered: `FY ${record.fiscalYear || '—'}`,
+        recordModel: 'ShareholdersMeeting', recordId: record.id,
+      }];
+    }
+    case 'adhoc': {
+      if (!record) return [];
+      const docKey = `adhoc:${record.id}`;
       return [{
         id: `adhoc-${record.id}`, label: record.customTitle || record.type || 'Ad Hoc Resolution',
-        build: () => T.adHocResolution(d, record),
+        docKey, signable: true,
+        build: () => T.adHocResolution({ ...d, signature: signatureFor(docKey) }, record),
         registryType: record.type || 'Ad Hoc Resolution',
         periodCovered: record.date || 'Ad hoc',
         recordModel: 'AdHocResolution', recordId: record.id,
       }];
+    }
     default:
       return [];
   }

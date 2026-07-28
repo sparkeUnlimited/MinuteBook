@@ -35,7 +35,7 @@ export function adHocResolution(data, res) {
         and execute all such documents as may be necessary to give effect to this resolution.</li>
     </ol>
 
-    ${signatureBlock(director, res?.dateSigned || res?.date)}
+    ${signatureBlock(director, res?.dateSigned || res?.date, data.signature)}
   `;
   return wrapDoc(body);
 }

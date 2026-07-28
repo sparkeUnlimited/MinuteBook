@@ -147,6 +147,25 @@ export const SECTIONS = {
     ],
   },
 
+  'shareholders-meeting': {
+    label: "Shareholders' Meetings",
+    model: 'ShareholdersMeeting',
+    repeatable: true,
+    rowLabel: (r) => `FY ${r.fiscalYear || '—'}${r.dateSigned ? ' (signed)' : ''}`,
+    fields: [
+      { name: 'fiscalYear', label: 'Fiscal Year', type: 'text', required: true, help: 'e.g. "2025"' },
+      { name: 'meetingDate', label: 'Meeting / Resolution Date', type: 'date' },
+      { name: 'status', label: 'Outcome', type: 'select', required: true, options: [
+        { value: 'no_updates', label: 'No updates — confirm continuation' },
+        { value: 'continued_previous', label: 'Continue with previous info (unchanged)' },
+        { value: 'custom', label: 'Custom — enter details' },
+      ] },
+      { name: 'notes', label: 'Details', type: 'textarea', showIf: { field: 'status', equals: 'custom' },
+        help: 'Used when the outcome is Custom.' },
+      { name: 'dateSigned', label: 'Date Signed', type: 'date' },
+    ],
+  },
+
   'adhoc': {
     label: 'Ad Hoc Resolutions',
     model: 'AdHocResolution',
@@ -176,7 +195,7 @@ export const SECTIONS = {
 export const NAV_GROUPS = [
   { label: null, items: ['overview'] },
   { label: 'Corporate Structure', items: ['corp-info', 'directors', 'officers', 'shares'] },
-  { label: 'Annual Updates', items: ['annual', 'adhoc'] },
+  { label: 'Annual Updates', items: ['annual', 'shareholders-meeting', 'adhoc'] },
   { label: 'Records & Documents', items: ['banking', 'documents'] },
 ];
 

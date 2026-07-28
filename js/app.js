@@ -11,8 +11,9 @@ import {
 import {
   renderFieldset, readRecord, validateRecord, wireConditionals,
 } from './formEngine.js';
-import { documentsFor } from './documents.js';
+import { documentsFor, signatureFor } from './documents.js';
 import { generateAndSave } from './pdf.js';
+import { captureSignature } from './signaturePad.js';
 import { esc, fmtDate } from '../templates/_helpers.js';
 import { currentRoute, navigate, onRoute, start } from './router.js';
 import { ensureSignedIn } from './loginGate.js';
@@ -156,22 +157,48 @@ async function handleGenerate(doc, btn) {
 function docButtons(sectionKey, record) {
   const docs = documentsFor(sectionKey, record);
   if (!docs.length) return '';
-  return `<div class="doc-actions">${docs.map((d, i) =>
-    `<button class="btn btn-doc" data-gen="${sectionKey}" data-rec="${record?.id || ''}" data-idx="${i}">📄 ${esc(d.label)}</button>`,
-  ).join('')}</div>`;
+  const rid = record?.id || '';
+  return `<div class="doc-actions">${docs.map((d, i) => {
+    const gen = `<button class="btn btn-doc" data-gen="${sectionKey}" data-rec="${rid}" data-idx="${i}">📄 ${esc(d.label)}</button>`;
+    const sign = d.signable
+      ? `<button class="btn btn-doc" data-sign="${sectionKey}" data-rec="${rid}" data-idx="${i}">✒️ ${signatureFor(d.docKey) ? 'Re-sign' : 'Sign'}</button>`
+      : '';
+    return gen + sign;
+  }).join('')}</div>`;
 }
 
-// Attach generate handlers within a container.
+// Attach generate + sign handlers within a container.
 function wireDocButtons(container, sectionKey) {
+  const docFor = (btn) => {
+    const recId = btn.getAttribute('data-rec');
+    const idx = Number(btn.getAttribute('data-idx'));
+    const record = recId ? store[SECTIONS[sectionKey].model]?.find((r) => r.id === recId) : null;
+    return documentsFor(sectionKey, record)[idx];
+  };
   container.querySelectorAll('[data-gen]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const recId = btn.getAttribute('data-rec');
-      const idx = Number(btn.getAttribute('data-idx'));
-      const record = recId ? store[SECTIONS[sectionKey].model]?.find((r) => r.id === recId) : null;
-      const docs = documentsFor(sectionKey, record);
-      if (docs[idx]) handleGenerate(docs[idx], btn);
-    });
+    btn.addEventListener('click', () => { const d = docFor(btn); if (d) handleGenerate(d, btn); });
   });
+  container.querySelectorAll('[data-sign]').forEach((btn) => {
+    btn.addEventListener('click', () => { const d = docFor(btn); if (d) handleSign(d); });
+  });
+}
+
+async function handleSign(doc) {
+  const dir = store.Director.find((x) => x.isSoleDirector) || store.Director[0];
+  const result = await captureSignature({ defaultName: dir?.name || '', title: `Sign — ${doc.label}` });
+  if (!result) return;
+  try {
+    const existing = store.Signature.find((s) => s.docKey === doc.docKey);
+    await saveRecord('Signature', {
+      ...(existing ? { id: existing.id } : {}),
+      docKey: doc.docKey, signerName: result.name, method: result.method,
+      dataUrl: result.dataUrl, signedDate: new Date().toISOString().slice(0, 10),
+    });
+    toast('Signed. The signature will appear on the generated PDF.', 'success');
+    render(currentRoute()); // refresh so buttons show "Re-sign"
+  } catch (err) {
+    toast(`Couldn't save signature: ${err.message}`, 'error');
+  }
 }
 
 // --- section views ---------------------------------------------------------

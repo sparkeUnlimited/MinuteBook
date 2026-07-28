@@ -118,6 +118,16 @@ const MODELS = {
       attestationConfirmed: 'Boolean', attestationBy: 'String', attestationAt: 'AWSDateTime',
     },
   },
+  // E-signatures, keyed by document (docKey: 'organizational' | 'annual:{id}' |
+  // 'adhoc:{id}' | 'shareholders:{id}'). dataUrl is the signature image (drawn
+  // or a rendered typed name); embedded into generated PDFs.
+  Signature: {
+    plural: 'Signatures',
+    fields: {
+      docKey: 'String', signerName: 'String', method: 'String',
+      dataUrl: 'String', signedDate: 'AWSDate',
+    },
+  },
   // Annual shareholders' meeting minutes log. status is one of
   // 'no_updates' | 'continued_previous' | 'custom'.
   ShareholdersMeeting: {
