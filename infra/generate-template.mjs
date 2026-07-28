@@ -6,10 +6,14 @@
 //
 // Design:
 //   - One DynamoDB table per model (PK = id, on-demand billing).
-//   - One AppSync API with Cognito user-pool auth (any signed-in pool user can
-//     read/write — single-user tool, no per-owner isolation; see infra/README).
+//   - One AppSync API with Cognito user-pool auth. Reads are open to any
+//     authenticated user; writes are gated by Cognito group via @aws_auth
+//     (minute book = Owners only; FinancialDocument = Owners + Accountants).
 //   - Generic APPSYNC_JS resolvers for get/list/create/update/delete, reused
 //     across every model (identical code, different data source).
+//   - Cognito groups (Owners, Accountants), an S3 bucket for financial files
+//     (folder per year), and a Cognito Identity Pool so the browser can
+//     upload/download to S3 with temporary, prefix-scoped credentials.
 //
 // Regenerate and commit the JSON whenever the model list changes.
 
@@ -75,7 +79,22 @@ const MODELS = {
       dateSigned: 'AWSDate', pdfGenerated: 'Boolean',
     },
   },
+  // Financial documents uploaded by the accountant (or owner). Metadata only —
+  // the file itself lives in S3 (see FinancialsBucket). Both Owners and
+  // Accountants may write these; everything else is Owners-only.
+  FinancialDocument: {
+    plural: 'FinancialDocuments',
+    writeGroups: ['Owners', 'Accountants'],
+    fields: {
+      fiscalYear: 'String', category: 'String', fileName: 'String',
+      s3Key: 'String', contentType: 'String', size: 'Int', uploadedBy: 'String',
+    },
+  },
 };
+
+// Which Cognito groups may create/update/delete a model. Reads are open to any
+// authenticated user (the accountant sees the whole minute book, read-only).
+const DEFAULT_WRITE_GROUPS = ['Owners'];
 
 // --- GraphQL SDL -----------------------------------------------------------
 
@@ -95,8 +114,11 @@ function buildSchemaSDL() {
   const types = Object.entries(MODELS).map(([m, d]) => typeBlock(m, d)).join('\n\n');
   const queries = Object.entries(MODELS).map(([m, d]) =>
     `  get${m}(id: ID!): ${m}\n  list${d.plural}(limit: Int, nextToken: String): ${m}Connection`).join('\n');
-  const mutations = Object.entries(MODELS).map(([m]) =>
-    `  create${m}(input: Create${m}Input!): ${m}\n  update${m}(input: Update${m}Input!): ${m}\n  delete${m}(input: Delete${m}Input!): ${m}`).join('\n');
+  const mutations = Object.entries(MODELS).map(([m, d]) => {
+    const groups = (d.writeGroups || DEFAULT_WRITE_GROUPS).map((g) => `"${g}"`).join(', ');
+    const a = ` @aws_auth(cognito_groups: [${groups}])`;
+    return `  create${m}(input: Create${m}Input!): ${m}${a}\n  update${m}(input: Update${m}Input!): ${m}${a}\n  delete${m}(input: Delete${m}Input!): ${m}${a}`;
+  }).join('\n');
   return `${types}\n\ntype Query {\n${queries}\n}\n\ntype Mutation {\n${mutations}\n}\n\nschema {\n  query: Query\n  mutation: Mutation\n}\n`;
 }
 
@@ -289,14 +311,132 @@ for (const [model, def] of Object.entries(MODELS)) {
   }
 }
 
+// --- Cognito groups (roles) ------------------------------------------------
+// Added to the EXISTING user pool. Owners = full access; Accountants =
+// read-only minute book + manage financial documents. You add users to these
+// groups in the Cognito console.
+resources.OwnersGroup = {
+  Type: 'AWS::Cognito::UserPoolGroup',
+  Properties: {
+    GroupName: 'Owners',
+    UserPoolId: { Ref: 'UserPoolId' },
+    Description: 'Full read/write access to the minute book.',
+    Precedence: 1,
+  },
+};
+resources.AccountantsGroup = {
+  Type: 'AWS::Cognito::UserPoolGroup',
+  Properties: {
+    GroupName: 'Accountants',
+    UserPoolId: { Ref: 'UserPoolId' },
+    Description: 'Read-only on the minute book; can manage financial documents.',
+    Precedence: 10,
+  },
+};
+
+// --- S3 bucket for financial files (folder per year: financials/{year}/) ----
+resources.FinancialsBucket = {
+  Type: 'AWS::S3::Bucket',
+  Properties: {
+    BucketName: { 'Fn::Sub': '${AWS::StackName}-financials-${AWS::AccountId}' },
+    BucketEncryption: {
+      ServerSideEncryptionConfiguration: [
+        { ServerSideEncryptionByDefault: { SSEAlgorithm: 'AES256' } },
+      ],
+    },
+    PublicAccessBlockConfiguration: {
+      BlockPublicAcls: true, BlockPublicPolicy: true,
+      IgnorePublicAcls: true, RestrictPublicBuckets: true,
+    },
+    OwnershipControls: { Rules: [{ ObjectOwnership: 'BucketOwnerEnforced' }] },
+    // Browser uploads/downloads need CORS. Access is gated by Cognito/IAM
+    // (SigV4-signed requests), so origin is not the security boundary.
+    CorsConfiguration: {
+      CorsRules: [{
+        AllowedHeaders: ['*'],
+        AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
+        AllowedOrigins: ['*'],
+        ExposedHeaders: ['ETag', 'x-amz-server-side-encryption', 'x-amz-request-id', 'x-amz-id-2'],
+        MaxAge: 3000,
+      }],
+    },
+  },
+};
+
+// --- Cognito Identity Pool: exchanges a signed-in user-pool token for
+//     temporary AWS creds scoped to the financials/ prefix, so the browser can
+//     upload/download directly to S3 (via the Amplify Storage library). --------
+resources.FinancialsIdentityPool = {
+  Type: 'AWS::Cognito::IdentityPool',
+  Properties: {
+    IdentityPoolName: { 'Fn::Sub': '${AWS::StackName}_identitypool' },
+    AllowUnauthenticatedIdentities: false,
+    CognitoIdentityProviders: [{
+      ProviderName: { 'Fn::Sub': 'cognito-idp.${CognitoRegion}.amazonaws.com/${UserPoolId}' },
+      ClientId: { Ref: 'UserPoolClientId' },
+      ServerSideTokenCheck: false,
+    }],
+  },
+};
+
+resources.FinancialsAuthRole = {
+  Type: 'AWS::IAM::Role',
+  Properties: {
+    AssumeRolePolicyDocument: {
+      Version: '2012-10-17',
+      Statement: [{
+        Effect: 'Allow',
+        Principal: { Federated: 'cognito-identity.amazonaws.com' },
+        Action: 'sts:AssumeRoleWithWebIdentity',
+        Condition: {
+          StringEquals: { 'cognito-identity.amazonaws.com:aud': { Ref: 'FinancialsIdentityPool' } },
+          'ForAnyValue:StringLike': { 'cognito-identity.amazonaws.com:amr': 'authenticated' },
+        },
+      }],
+    },
+    Policies: [{
+      PolicyName: 'financials-s3',
+      PolicyDocument: {
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+            Resource: { 'Fn::Sub': '${FinancialsBucket.Arn}/financials/*' },
+          },
+          {
+            Effect: 'Allow',
+            Action: ['s3:ListBucket'],
+            Resource: { 'Fn::GetAtt': ['FinancialsBucket', 'Arn'] },
+            Condition: { StringLike: { 's3:prefix': ['financials/*'] } },
+          },
+        ],
+      },
+    }],
+  },
+};
+
+resources.FinancialsIdentityPoolRoleAttachment = {
+  Type: 'AWS::Cognito::IdentityPoolRoleAttachment',
+  Properties: {
+    IdentityPoolId: { Ref: 'FinancialsIdentityPool' },
+    Roles: { authenticated: { 'Fn::GetAtt': ['FinancialsAuthRole', 'Arn'] } },
+  },
+};
+
 const template = {
   AWSTemplateFormatVersion: '2010-09-09',
-  Description: 'Minute Book — AppSync + DynamoDB backend (Cognito user-pool auth).',
+  Description: 'Minute Book — AppSync + DynamoDB + S3 backend with Cognito group roles (Owners / Accountants).',
   Parameters: {
     UserPoolId: {
       Type: 'String',
       Default: 'us-east-1_iQ2q3z7ep',
       Description: 'Existing Cognito user pool id to authorize the API.',
+    },
+    UserPoolClientId: {
+      Type: 'String',
+      Default: '6sdk3tr7ou04ggjv0pdvclq36i',
+      Description: 'Existing user-pool app client id (public web client), for the Identity Pool.',
     },
     CognitoRegion: {
       Type: 'String',
@@ -314,6 +454,14 @@ const template = {
       Description: 'AppSync API id.',
       Value: { 'Fn::GetAtt': ['GraphQLApi', 'ApiId'] },
     },
+    FinancialsBucketName: {
+      Description: 'S3 bucket for financial files — set as MB_S3_BUCKET.',
+      Value: { Ref: 'FinancialsBucket' },
+    },
+    IdentityPoolId: {
+      Description: 'Cognito Identity Pool id — set as MB_IDENTITY_POOL_ID.',
+      Value: { Ref: 'FinancialsIdentityPool' },
+    },
     Region: {
       Description: 'Region the API is deployed in (for config.appsync.region).',
       Value: { Ref: 'AWS::Region' },
@@ -326,4 +474,5 @@ writeFileSync(out, JSON.stringify(template, null, 2) + '\n');
 
 const resourceCount = Object.keys(resources).length;
 console.log(`[generate-template] wrote infra/minutebook-appsync.json`);
-console.log(`  models: ${Object.keys(MODELS).length}, resources: ${resourceCount} (tables + data sources + ${Object.keys(MODELS).length * OPS.length} resolvers + api/schema/role)`);
+console.log(`  models: ${Object.keys(MODELS).length}, resolvers: ${Object.keys(MODELS).length * OPS.length}, total resources: ${resourceCount}`);
+console.log(`  added: Owners/Accountants groups, S3 bucket, Cognito Identity Pool + auth role`);
