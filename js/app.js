@@ -5,6 +5,7 @@
 import { SECTIONS, NAV_ORDER } from './schema.js';
 import {
   store, hydrate, single, saveRecord, deleteRecord, onChange,
+  corps, activeCorp, setActiveCorp, createCorp,
 } from './state.js';
 import {
   renderFieldset, readRecord, validateRecord, wireConditionals,
@@ -44,6 +45,57 @@ function renderNav(active) {
     const on = key === active ? ' class="active"' : '';
     return `<a href="#/${key}"${on}>${esc(s.label)}</a>`;
   }).join('');
+}
+
+// Corp switcher — sits above the nav. Each corporation is its own CorpInfo
+// record; this only chooses which one is active. Names/numbers are edited in
+// the Corporation Info form.
+function renderCorpSwitcher() {
+  let host = document.getElementById('corp-switcher');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'corp-switcher';
+    host.className = 'corp-switcher';
+    $nav.parentNode.insertBefore(host, $nav);
+  }
+  const list = corps();
+  if (!list.length) {
+    host.innerHTML = `<button class="btn-add-corp" id="add-corp">+ Add your first corporation</button>`;
+  } else {
+    const options = list.map((c) =>
+      `<option value="${esc(c.id)}"${c.id === store.activeCorpId ? ' selected' : ''}>${esc(c.legalName || 'Untitled corporation')}</option>`).join('');
+    host.innerHTML = `
+      <label class="cs-label" for="corp-select">Corporation</label>
+      <div class="cs-row">
+        <select id="corp-select" class="corp-select">${options}</select>
+        <button class="btn-add-corp" id="add-corp" title="Add a corporation">＋</button>
+      </div>`;
+  }
+  const sel = document.getElementById('corp-select');
+  if (sel) sel.addEventListener('change', async () => {
+    await setActiveCorp(sel.value);
+    render(currentRoute());
+  });
+  document.getElementById('add-corp').addEventListener('click', addCorp);
+}
+
+async function addCorp() {
+  const name = prompt('New corporation — legal name (you can fill in the rest on the next screen):');
+  if (name === null) return; // cancelled
+  try {
+    await createCorp({ legalName: name.trim() || 'Untitled corporation' });
+    toast('Corporation added.', 'success');
+    if (currentRoute() === 'corp-info') render('corp-info');
+    else navigate('corp-info'); // land on the form to enter number, jurisdiction, etc.
+  } catch (err) {
+    toast(`Couldn't add corporation: ${err.message}`, 'error');
+  }
+}
+
+// The record a single-record section edits: the active corp for CorpInfo,
+// else the active corp's scoped record (e.g. BankingInfo).
+function currentRecordFor(section) {
+  return section.model === 'CorpInfo' ? activeCorp() : single(section.model);
 }
 
 // --- PDF generation + registry upsert --------------------------------------
@@ -123,9 +175,13 @@ function sectionHeader(section, extra = '') {
 
 // Single-record section (CorpInfo, BankingInfo).
 function renderSingle(key, section) {
-  const record = single(section.model) || {};
+  const isCorp = section.model === 'CorpInfo';
+  const record = currentRecordFor(section) || {};
+  const firstCorpHint = isCorp && !activeCorp()
+    ? `<p class="doc-gate">No corporation yet — fill this in and save to create your first one.</p>` : '';
   $main.innerHTML = `
     ${sectionHeader(section)}
+    ${firstCorpHint}
     <form class="card" id="form-single">
       ${renderFieldset(section.fields, record, false)}
       <div class="card-actions">
@@ -143,8 +199,14 @@ function renderSingle(key, section) {
     const missing = validateRecord(form, section.fields, rec);
     if (missing.length) { toast(`Required: ${missing.join(', ')}`, 'error'); return; }
     try {
-      const existing = single(section.model);
-      await saveRecord(section.model, existing ? { id: existing.id, ...rec } : rec);
+      const existing = currentRecordFor(section);
+      if (isCorp && !existing) {
+        await createCorp(rec);           // first corp — becomes active
+        renderCorpSwitcher();
+      } else {
+        await saveRecord(section.model, existing ? { id: existing.id, ...rec } : rec);
+        if (isCorp) renderCorpSwitcher(); // name may have changed
+      }
       toast('Saved.', 'success');
       renderDocBlock(key, section, null);
     } catch (err) { toast(`Couldn't save: ${err.message}`, 'error'); }
@@ -158,7 +220,7 @@ function renderSingle(key, section) {
 function renderDocBlock(key, section, record) {
   const block = document.getElementById('doc-block');
   if (!block) return;
-  const rec = record || single(section.model) || {};
+  const rec = record || currentRecordFor(section) || {};
   const missing = validateRecord(document.getElementById('form-single'), section.fields, readRecordSafe(section, rec));
   if (missing.length) {
     block.innerHTML = `<p class="doc-gate">Complete required fields and save to generate documents.</p>`;
@@ -391,8 +453,18 @@ async function createNewAnnual() {
 
 function render(route) {
   renderNav(route);
+  renderCorpSwitcher();
   const section = SECTIONS[route];
   if (!section) return;
+
+  // Every section except Corporation Info needs an active corp to scope to.
+  if (route !== 'corp-info' && !store.activeCorpId) {
+    $main.innerHTML = `
+      ${sectionHeader(section)}
+      <p class="doc-gate">Add a corporation first — go to
+        <a href="#/corp-info">Corporation Info</a> to create one.</p>`;
+    return;
+  }
 
   if (section.view === 'registry') return renderRegistry();
   if (section.groups) return renderGroups(route, section);

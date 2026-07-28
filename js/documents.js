@@ -2,13 +2,14 @@
 // describes which documents can be generated from each section. Keeps the
 // template layer decoupled from the store shape.
 
-import { store, single } from './state.js';
+import { store, single, activeCorp } from './state.js';
 import * as T from '../templates/index.js';
 
-// Assemble the flat data object every template consumes.
+// Assemble the flat data object every template consumes. Scoped stores already
+// hold only the active corp's records; `corp` is the active corporation.
 export function templateData() {
   return {
-    corp: single('CorpInfo'),
+    corp: activeCorp(),
     directors: store.Director,
     shareClasses: store.ShareClass,
     shareholders: store.Shareholder,

@@ -25,9 +25,11 @@ function uid() {
 export const localAdapter = {
   name: 'local',
 
-  async list(model) {
+  async list(model, corpId) {
     const db = readAll();
-    return Object.values(db[model] || {});
+    const items = Object.values(db[model] || {});
+    // corp-scoped models filter by corpId when one is supplied.
+    return corpId ? items.filter((r) => r.corpId === corpId) : items;
   },
 
   async get(model, id) {
