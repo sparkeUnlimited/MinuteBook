@@ -42,9 +42,6 @@ body {
 }
 .brand { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
 .brand h2 { margin: 0; font-size: 17px; color: #fff; letter-spacing: 0.02em; }
-.backend-status { font-size: 10px; color: #7c8697; white-space: nowrap; }
-.backend-status.amplify { color: #46b06e; }
-.backend-status.local { color: #d9a441; }
 
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a {
@@ -315,7 +312,7 @@ textarea { resize: vertical; }
    ========================================================================== */
 @media print {
   .sidebar, .section-head, .card-actions, .doc-actions, .doc-actions-wrap,
-  .doc-block-title, .btn, #toast, .backend-status { display: none !important; }
+  .doc-block-title, .btn, #toast { display: none !important; }
   .app { display: block; }
   .main { max-width: 100%; padding: 0; }
   .pdf-render-host { position: static !important; left: 0 !important; }

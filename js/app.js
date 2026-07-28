@@ -22,7 +22,6 @@ import { currentEmail, logout } from './auth.js';
 
 const $nav = document.getElementById('nav');
 const $main = document.getElementById('main');
-const $status = document.getElementById('backend-status');
 
 // --- toast -----------------------------------------------------------------
 
@@ -869,9 +868,6 @@ async function boot() {
     console.error(err);
     toast('Failed to load data. Working from an empty state.', 'error');
   }
-  $status.textContent = store.backend === 'amplify' ? '● AWS (AppSync)' : '● Local (this device)';
-  $status.className = `backend-status ${store.backend}`;
-
   onRoute(render);
   start();
   renderSignOut();
