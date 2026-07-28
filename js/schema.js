@@ -32,6 +32,8 @@ export const SECTIONS = {
       { name: 'incorporationDate', label: 'Incorporation Date', type: 'date', required: true },
       { name: 'registeredOffice', label: 'Registered Office Address', type: 'textarea', required: true },
       { name: 'mailingAddress', label: 'Mailing Address (if different)', type: 'textarea' },
+      { name: 'parentCorpId', label: 'Parent Corporation', type: 'select', optionsFrom: 'corps',
+        help: 'If this corporation is a subsidiary, select its parent (e.g. your holding corp).' },
     ],
   },
 
@@ -67,7 +69,10 @@ export const SECTIONS = {
         key: 'shareholders', model: 'Shareholder', label: 'Shareholders', repeatable: true,
         rowLabel: (r) => r.name || 'New shareholder',
         fields: [
-          { name: 'name', label: 'Shareholder Name', type: 'text', required: true },
+          { name: 'shareholderCorpId', label: 'Shareholder is another corporation (in this book)', type: 'select', optionsFrom: 'corps',
+            help: 'Optional — select if a corporation here holds these shares (e.g. your holding corp). Its name fills in automatically.' },
+          { name: 'name', label: 'Shareholder Name', type: 'text',
+            help: 'For an individual/outside shareholder. Leave blank if you selected a corporation above.' },
           { name: 'shareClassId', label: 'Share Class', type: 'select', optionsFrom: 'shareClasses', required: true },
           { name: 'quantity', label: 'Quantity', type: 'number', required: true },
           { name: 'certificateNumber', label: 'Certificate #', type: 'text' },

@@ -21,10 +21,10 @@ const API_ESM = 'https://esm.sh/aws-amplify@6/api';
 // operations we need. Field selection is intentionally "*"-ish per model.
 // Field selection per model. Scoped models include `corpId` (the tenant key).
 const SELECTION = {
-  CorpInfo: 'id legalName tradeNames corporationNumber businessNumber jurisdiction incorporationDate registeredOffice mailingAddress updatedAt',
+  CorpInfo: 'id legalName tradeNames corporationNumber businessNumber jurisdiction incorporationDate registeredOffice mailingAddress parentCorpId updatedAt',
   Director: 'id corpId name address titles appointmentDate isSoleDirector',
   ShareClass: 'id corpId className authorized authorizedUnlimited issued rightsRestrictions',
-  Shareholder: 'id corpId name shareClassId quantity certificateNumber',
+  Shareholder: 'id corpId name shareClassId quantity certificateNumber shareholderCorpId',
   BankingInfo: 'id corpId bankName branchAddress signingOfficers accountTypes',
   AnnualResolution: 'id corpId fiscalYearCovered financialStatementsApproved directorContinuation dividendDeclared dividendAmount dividendClass auditWaiver dateSigned pdfGenerated createdAt',
   AdHocResolution: 'id corpId type customTitle date details dateSigned pdfGenerated createdAt',

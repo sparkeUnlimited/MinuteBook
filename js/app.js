@@ -98,6 +98,11 @@ function currentRecordFor(section) {
   return section.model === 'CorpInfo' ? activeCorp() : single(section.model);
 }
 
+// Corporations other than the active one (for parent / corp-shareholder pickers).
+function otherCorps() {
+  return corps().filter((c) => c.id !== store.activeCorpId);
+}
+
 // --- PDF generation + registry upsert --------------------------------------
 
 async function upsertRegistry(doc, signed) {
@@ -183,7 +188,7 @@ function renderSingle(key, section) {
     ${sectionHeader(section)}
     ${firstCorpHint}
     <form class="card" id="form-single">
-      ${renderFieldset(section.fields, record, false)}
+      ${renderFieldset(section.fields, record, false, { corps: otherCorps() })}
       <div class="card-actions">
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
@@ -328,7 +333,7 @@ function renderGroups(key, section) {
       <div class="group-rows"></div>`;
     host.appendChild(wrap);
     const rowsEl = wrap.querySelector('.group-rows');
-    const context = () => ({ shareClasses: store.ShareClass, shareholders: store.Shareholder });
+    const context = () => ({ shareClasses: store.ShareClass, shareholders: store.Shareholder, corps: otherCorps() });
 
     const draw = () => {
       const records = store[group.model] || [];
@@ -370,6 +375,11 @@ function wireGroupRow(el, group, redraw) {
     e.preventDefault();
     const id = el.getAttribute('data-id') || null;
     const rec = readRecord(el, group.fields);
+    // A corporation shareholder mirrors that corp's legal name for display.
+    if (group.model === 'Shareholder' && rec.shareholderCorpId) {
+      const c = corps().find((x) => x.id === rec.shareholderCorpId);
+      if (c) rec.name = c.legalName;
+    }
     const missing = validateRecord(el, group.fields, rec);
     if (missing.length) { toast(`Required: ${missing.join(', ')}`, 'error'); return; }
     try { await saveRecord(group.model, id ? { id, ...rec } : rec); toast('Saved.', 'success'); redraw(); }

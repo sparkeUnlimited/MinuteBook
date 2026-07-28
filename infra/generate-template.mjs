@@ -39,6 +39,8 @@ const MODELS = {
       legalName: 'String', tradeNames: '[String]', corporationNumber: 'String',
       businessNumber: 'String', jurisdiction: 'String', incorporationDate: 'AWSDate',
       registeredOffice: 'String', mailingAddress: 'String',
+      // Group structure: the parent corporation's id, if this is a subsidiary.
+      parentCorpId: 'ID',
     },
   },
   Director: {
@@ -61,6 +63,9 @@ const MODELS = {
     plural: 'Shareholders',
     fields: {
       name: 'String', shareClassId: 'ID', quantity: 'Int', certificateNumber: 'String',
+      // If another corporation in this minute book holds these shares, its id
+      // (e.g. the holding corp owning a subsidiary). `name` mirrors its legal name.
+      shareholderCorpId: 'ID',
     },
   },
   BankingInfo: {
