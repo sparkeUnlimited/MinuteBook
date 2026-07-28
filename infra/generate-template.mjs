@@ -111,9 +111,21 @@ const MODELS = {
     writeGroups: ['Executives', 'Admin', 'Finance'],
     fields: {
       scope: 'String', fiscalYear: 'String', category: 'String', title: 'String',
+      // Plain-English note of what the file is (accountant filenames are cryptic).
+      description: 'String',
       fileName: 'String', s3Key: 'String', contentType: 'String', size: 'Int',
       uploadedBy: 'String',
       attestationConfirmed: 'Boolean', attestationBy: 'String', attestationAt: 'AWSDateTime',
+    },
+  },
+  // E-signatures, keyed by document (docKey: 'organizational' | 'annual:{id}' |
+  // 'adhoc:{id}' | 'shareholders:{id}'). dataUrl is the signature image (drawn
+  // or a rendered typed name); embedded into generated PDFs.
+  Signature: {
+    plural: 'Signatures',
+    fields: {
+      docKey: 'String', signerName: 'String', method: 'String',
+      dataUrl: 'String', signedDate: 'AWSDate',
     },
   },
   // Annual shareholders' meeting minutes log. status is one of

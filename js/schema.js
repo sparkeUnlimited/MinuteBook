@@ -16,6 +16,19 @@
 export const JURISDICTIONS = ['Ontario', 'Canada (Federal)'];
 export const DIRECTOR_TITLES = ['President', 'Secretary', 'Treasurer', 'CEO', 'CFO', 'Chair'];
 export const ACCOUNT_TYPES = ['Chequing', 'Savings', 'USD', 'Line of Credit', 'Credit Card'];
+export const OFFICES = ['President', 'Secretary', 'Treasurer', 'CEO', 'CFO', 'COO', 'Chair', 'Vice-President'];
+
+// Document categories by scope (for the Documents / uploads section).
+export const DOC_CATEGORIES = {
+  corporate: [
+    'Articles of Incorporation', 'Certificate of Incorporation', 'By-laws',
+    'Certificate / Endorsement (Master, Red Seal)', 'Shareholder Agreement', 'Other',
+  ],
+  year: [
+    'Financial Statements', 'Tax Return (T2)', 'Notice to Reader',
+    'Accountant Package', 'Working Papers', 'GST/HST', 'Other',
+  ],
+};
 
 export const SECTIONS = {
   'corp-info': {
@@ -37,6 +50,11 @@ export const SECTIONS = {
     ],
   },
 
+  'overview': {
+    label: 'Overview',
+    view: 'overview', // custom dashboard / intro
+  },
+
   'directors': {
     label: 'Directors',
     model: 'Director',
@@ -51,6 +69,19 @@ export const SECTIONS = {
     ],
   },
 
+  'officers': {
+    label: 'Officers',
+    model: 'Officer',
+    repeatable: true,
+    rowLabel: (r) => `${r.name || 'New officer'}${r.office ? ` — ${r.office}` : ''}`,
+    fields: [
+      { name: 'name', label: 'Full Name', type: 'text', required: true },
+      { name: 'office', label: 'Office', type: 'select', options: OFFICES, required: true },
+      { name: 'appointmentDate', label: 'Appointment Date', type: 'date' },
+      { name: 'endDate', label: 'End Date (if resigned)', type: 'date' },
+    ],
+  },
+
   'shares': {
     label: 'Shares',
     // Two related models edited on one screen.
@@ -60,7 +91,10 @@ export const SECTIONS = {
         rowLabel: (r) => r.className || 'New class',
         fields: [
           { name: 'className', label: 'Class Name', type: 'text', required: true, help: 'e.g. "Common", "Class A Special"' },
-          { name: 'authorized', label: 'Authorized', type: 'number', required: true, help: 'Use a large number or "unlimited" note in rights.' },
+          { name: 'authorizedUnlimited', label: 'Unlimited authorized shares', type: 'boolean',
+            help: 'Check for an unlimited number of authorized shares (common for Ontario corps).' },
+          { name: 'authorized', label: 'Authorized', type: 'number', required: true,
+            showIf: { field: 'authorizedUnlimited', equals: false }, help: 'Number of authorized shares (if not unlimited).' },
           { name: 'issued', label: 'Issued', type: 'number', required: true },
           { name: 'rightsRestrictions', label: 'Rights / Restrictions', type: 'textarea' },
         ],
@@ -98,7 +132,8 @@ export const SECTIONS = {
     label: 'Annual Resolutions',
     model: 'AnnualResolution',
     repeatable: true,
-    immutableWhen: (r) => !!r.dateSigned, // locked once signed
+    // Unlocked for now (process still being refined) — signed resolutions can
+    // be edited/deleted. Re-add `immutableWhen: (r) => !!r.dateSigned` to lock.
     rowLabel: (r) => `FY ${r.fiscalYearCovered || '—'}${r.dateSigned ? ' (signed)' : ''}`,
     fields: [
       { name: 'fiscalYearCovered', label: 'Fiscal Year Covered', type: 'text', required: true, help: 'e.g. "2025" or "Year ended Dec 31, 2025"' },
@@ -109,6 +144,25 @@ export const SECTIONS = {
       { name: 'dividendClass', label: 'Dividend on Class', type: 'text', showIf: { field: 'dividendDeclared', equals: true } },
       { name: 'auditWaiver', label: 'Waive Audit', type: 'boolean' },
       { name: 'dateSigned', label: 'Date Signed', type: 'date', help: 'Setting this locks the record.' },
+    ],
+  },
+
+  'shareholders-meeting': {
+    label: "Shareholders' Meetings",
+    model: 'ShareholdersMeeting',
+    repeatable: true,
+    rowLabel: (r) => `FY ${r.fiscalYear || '—'}${r.dateSigned ? ' (signed)' : ''}`,
+    fields: [
+      { name: 'fiscalYear', label: 'Fiscal Year', type: 'text', required: true, help: 'e.g. "2025"' },
+      { name: 'meetingDate', label: 'Meeting / Resolution Date', type: 'date' },
+      { name: 'status', label: 'Outcome', type: 'select', required: true, options: [
+        { value: 'no_updates', label: 'No updates — confirm continuation' },
+        { value: 'continued_previous', label: 'Continue with previous info (unchanged)' },
+        { value: 'custom', label: 'Custom — enter details' },
+      ] },
+      { name: 'notes', label: 'Details', type: 'textarea', showIf: { field: 'status', equals: 'custom' },
+        help: 'Used when the outcome is Custom.' },
+      { name: 'dateSigned', label: 'Date Signed', type: 'date' },
     ],
   },
 
@@ -131,12 +185,23 @@ export const SECTIONS = {
     ],
   },
 
-  'registry': {
-    label: 'Document Registry',
-    view: 'registry', // custom view, not a generic form
+  'documents': {
+    label: 'Documents',
+    view: 'documents', // custom view — file uploads
+  },
+
+  'minute-book': {
+    label: 'Annual Minute Book',
+    view: 'minute-book', // custom view — compile + store the locked yearly PDF
   },
 };
 
-export const NAV_ORDER = [
-  'corp-info', 'directors', 'shares', 'banking', 'annual', 'adhoc', 'registry',
+// Sidebar nav grouped into logical sections. `label: null` = ungrouped (top).
+export const NAV_GROUPS = [
+  { label: null, items: ['overview'] },
+  { label: 'Corporate Structure', items: ['corp-info', 'directors', 'officers', 'shares'] },
+  { label: 'Annual Updates', items: ['annual', 'shareholders-meeting', 'adhoc'] },
+  { label: 'Records & Documents', items: ['banking', 'documents', 'minute-book'] },
 ];
+
+export const NAV_ORDER = NAV_GROUPS.flatMap((g) => g.items);

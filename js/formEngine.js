@@ -25,7 +25,10 @@ function optionList(field, context) {
       label: r.className || r.name || r.legalName || r.id,
     }));
   }
-  return (field.options || []).map((o) => ({ value: o, label: o }));
+  // Options may be plain strings or { value, label } objects.
+  return (field.options || []).map((o) => (
+    o && typeof o === 'object' ? { value: o.value, label: o.label } : { value: o, label: o }
+  ));
 }
 
 function renderField(field, value, disabled, context) {

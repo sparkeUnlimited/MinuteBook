@@ -58,7 +58,24 @@ body {
 .nav a:hover { background: #1b222c; color: #fff; }
 .nav a.active { background: var(--accent); color: #fff; font-weight: 600; }
 
+.nav-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.nav-group-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #58616e; padding: 6px 12px 4px; }
+
 .sidebar-foot { margin-top: auto; font-size: 11px; color: #58616e; padding-top: 16px; }
+
+/* Overview / dashboard */
+.intro { color: var(--muted); font-size: 14px; max-width: 660px; margin: 0 0 18px; line-height: 1.55; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-top: 8px; }
+.stat-tile {
+  display: flex; flex-direction: column; gap: 5px; padding: 15px 16px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow); text-decoration: none; color: var(--ink); transition: border-color .12s;
+}
+.stat-tile:hover { border-color: var(--border-strong); }
+.stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.stat-value { font-size: 16px; font-weight: 600; }
+.stat-value.warn { color: var(--danger); }
+.doc-h3 { font-size: 15px; margin: 0 0 8px; color: var(--ink); }
 
 /* Corp switcher */
 .corp-switcher { margin-bottom: 16px; }
@@ -155,6 +172,60 @@ textarea { resize: vertical; }
 .pill-ok { background: #e2f3e9; color: var(--ok); }
 .alert { padding: 12px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; }
 .alert-overdue { background: #fdecea; color: var(--danger); border: 1px solid #f3c2bd; }
+
+/* --- Documents view --- */
+#doc-list .doc-h3 { font-size: 15px; margin: 22px 0 8px; color: var(--ink); }
+.doc-cell-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.doc-cell-actions .btn { padding: 5px 11px; font-size: 13px; }
+.doc-desc { font-weight: 600; color: var(--ink); }
+.doc-fname { font-size: 12px; color: var(--muted); margin-top: 2px; word-break: break-all; }
+#upload-form .chk { margin: 6px 0 4px; }
+#doc-file { padding: 7px; }
+
+/* --- Signature modal --- */
+.sig-overlay {
+  position: fixed; inset: 0; z-index: 210; display: flex; align-items: center; justify-content: center;
+  background: rgba(16, 20, 26, 0.55); padding: 20px;
+}
+.sig-modal {
+  background: var(--panel); border-radius: 14px; box-shadow: 0 16px 48px rgba(0,0,0,0.35);
+  padding: 24px; width: 100%; max-width: 560px;
+}
+.sig-modal h2 { margin: 0 0 14px; font-size: 18px; }
+.sig-lbl { display: block; font-size: 12px; font-weight: 600; color: #374150; margin-bottom: 5px; }
+.sig-name { width: 100%; padding: 9px 11px; border: 1px solid var(--border-strong); border-radius: 8px; font-size: 14px; margin-bottom: 14px; }
+.sig-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.sig-tab { flex: 1; padding: 8px; border: 1px solid var(--border-strong); background: #f2f3f5; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+.sig-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sig-canvas {
+  width: 100%; height: 180px; border: 1px dashed var(--border-strong); border-radius: 10px;
+  background: #fff; touch-action: none; cursor: crosshair; display: block;
+}
+.sig-hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.sig-link { background: none; border: none; color: var(--accent); cursor: pointer; font: inherit; padding: 0; }
+.sig-link.nudge { color: var(--danger); font-weight: 700; }
+.sig-typed { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; font-size: 15px; }
+.sig-typed-preview {
+  min-height: 70px; margin-top: 10px; border: 1px dashed var(--border-strong); border-radius: 10px;
+  display: flex; align-items: center; padding: 0 16px; background: #fff;
+  font-family: "Snell Roundhand", "Brush Script MT", "Segoe Script", cursive; font-size: 34px; color: #111;
+}
+.sig-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+/* embedded signature image in generated documents */
+.resolution-doc .sig-img { display: block; max-height: 60px; max-width: 260px; margin-bottom: 2px; }
+
+/* --- Annual Minute Book (compiled) --- */
+.mb-cover { text-align: center; padding: 120px 0 90px; }
+.mb-cover-kicker { font-size: 12px; letter-spacing: 0.25em; text-transform: uppercase; color: #555; margin: 0 0 18px; }
+.mb-cover-title { font-size: 26px; margin: 0 0 8px; }
+.mb-cover-sub { font-size: 15px; font-style: italic; margin: 0 0 26px; }
+.mb-cover-meta { font-size: 11px; color: #444; line-height: 1.7; }
+.mb-part { margin-top: 28px; border-top: 3px double #111; padding-top: 14px; page-break-before: always; }
+.mb-part-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; margin: 0 0 12px; }
+/* nested full documents keep their content styling but drop the outer frame */
+.mb-book .resolution-doc { width: auto; padding: 0; }
+.mb-book .resolution-doc .doc-head { border-bottom-width: 1px; }
 
 /* --- Toast --- */
 .toast {

@@ -44,7 +44,7 @@ export function annualResolution(data, res) {
     <p><strong>IT IS RESOLVED THAT:</strong></p>
     <ol class="doc-list">${clauses.join('')}</ol>
 
-    ${signatureBlock(director, res?.dateSigned)}
+    ${signatureBlock(director, res?.dateSigned, data.signature)}
   `;
   return wrapDoc(body);
 }

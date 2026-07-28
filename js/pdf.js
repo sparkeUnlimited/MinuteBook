@@ -11,12 +11,27 @@
 
 const A4 = { width: 210, marginX: 14, marginTop: 16 }; // mm
 
-function getDoc() {
+function getDoc(options = {}) {
   const jspdf = window.jspdf;
   if (!jspdf || !jspdf.jsPDF) {
     throw new Error('jsPDF failed to load. Check the CDN script tag / network.');
   }
-  return new jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true });
+  return new jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true, ...options });
+}
+
+// PDF permission flags for "locked" documents: viewing and printing allowed,
+// modification not. A random owner password prevents casually lifting the
+// restrictions. NOTE: these are standard PDF permission flags — a deterrent
+// for a stored record, not strong encryption.
+function lockOptions() {
+  const rand = crypto.getRandomValues(new Uint32Array(4));
+  const ownerPassword = [...rand].map((n) => n.toString(36)).join('');
+  return {
+    encryption: {
+      ownerPassword,
+      userPermissions: ['print'],
+    },
+  };
 }
 
 // Render the template HTML into an off-screen but rendered container so
@@ -29,8 +44,8 @@ function mountForRender(html) {
   return host;
 }
 
-export async function buildPdf(html, filename) {
-  const doc = getDoc();
+export async function buildPdf(html, filename, { locked = false } = {}) {
+  const doc = getDoc(locked ? lockOptions() : {});
   const host = mountForRender(html);
   const target = host.querySelector('.resolution-doc') || host;
   try {

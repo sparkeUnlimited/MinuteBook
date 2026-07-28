@@ -2,7 +2,8 @@
 // view (single form / repeatable rows / grouped / registry), and handles
 // save, delete, and PDF generation. Single-page app with hash routing.
 
-import { SECTIONS, NAV_ORDER } from './schema.js';
+import { SECTIONS, NAV_ORDER, NAV_GROUPS, DOC_CATEGORIES } from './schema.js';
+import { storage, buildKey } from './storage.js';
 import {
   store, hydrate, single, saveRecord, deleteRecord, onChange,
   corps, activeCorp, setActiveCorp, createCorp,
@@ -10,8 +11,9 @@ import {
 import {
   renderFieldset, readRecord, validateRecord, wireConditionals,
 } from './formEngine.js';
-import { documentsFor } from './documents.js';
-import { generateAndSave } from './pdf.js';
+import { documentsFor, signatureFor, compileMinuteBook, MINUTE_BOOK_CATEGORY } from './documents.js';
+import { generateAndSave, buildPdf, saveOrShare } from './pdf.js';
+import { captureSignature } from './signaturePad.js';
 import { esc, fmtDate } from '../templates/_helpers.js';
 import { currentRoute, navigate, onRoute, start } from './router.js';
 import { ensureSignedIn } from './loginGate.js';
@@ -40,10 +42,14 @@ function toast(msg, type = 'info') {
 // --- navigation ------------------------------------------------------------
 
 function renderNav(active) {
-  $nav.innerHTML = NAV_ORDER.map((key) => {
-    const s = SECTIONS[key];
-    const on = key === active ? ' class="active"' : '';
-    return `<a href="#/${key}"${on}>${esc(s.label)}</a>`;
+  $nav.innerHTML = NAV_GROUPS.map((group) => {
+    const links = group.items.map((key) => {
+      const s = SECTIONS[key];
+      const on = key === active ? ' class="active"' : '';
+      return `<a href="#/${key}"${on}>${esc(s.label)}</a>`;
+    }).join('');
+    const heading = group.label ? `<div class="nav-group-label">${esc(group.label)}</div>` : '';
+    return `<div class="nav-group">${heading}${links}</div>`;
   }).join('');
 }
 
@@ -151,22 +157,48 @@ async function handleGenerate(doc, btn) {
 function docButtons(sectionKey, record) {
   const docs = documentsFor(sectionKey, record);
   if (!docs.length) return '';
-  return `<div class="doc-actions">${docs.map((d, i) =>
-    `<button class="btn btn-doc" data-gen="${sectionKey}" data-rec="${record?.id || ''}" data-idx="${i}">📄 ${esc(d.label)}</button>`,
-  ).join('')}</div>`;
+  const rid = record?.id || '';
+  return `<div class="doc-actions">${docs.map((d, i) => {
+    const gen = `<button class="btn btn-doc" data-gen="${sectionKey}" data-rec="${rid}" data-idx="${i}">📄 ${esc(d.label)}</button>`;
+    const sign = d.signable
+      ? `<button class="btn btn-doc" data-sign="${sectionKey}" data-rec="${rid}" data-idx="${i}">✒️ ${signatureFor(d.docKey) ? 'Re-sign' : 'Sign'}</button>`
+      : '';
+    return gen + sign;
+  }).join('')}</div>`;
 }
 
-// Attach generate handlers within a container.
+// Attach generate + sign handlers within a container.
 function wireDocButtons(container, sectionKey) {
+  const docFor = (btn) => {
+    const recId = btn.getAttribute('data-rec');
+    const idx = Number(btn.getAttribute('data-idx'));
+    const record = recId ? store[SECTIONS[sectionKey].model]?.find((r) => r.id === recId) : null;
+    return documentsFor(sectionKey, record)[idx];
+  };
   container.querySelectorAll('[data-gen]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const recId = btn.getAttribute('data-rec');
-      const idx = Number(btn.getAttribute('data-idx'));
-      const record = recId ? store[SECTIONS[sectionKey].model]?.find((r) => r.id === recId) : null;
-      const docs = documentsFor(sectionKey, record);
-      if (docs[idx]) handleGenerate(docs[idx], btn);
-    });
+    btn.addEventListener('click', () => { const d = docFor(btn); if (d) handleGenerate(d, btn); });
   });
+  container.querySelectorAll('[data-sign]').forEach((btn) => {
+    btn.addEventListener('click', () => { const d = docFor(btn); if (d) handleSign(d); });
+  });
+}
+
+async function handleSign(doc) {
+  const dir = store.Director.find((x) => x.isSoleDirector) || store.Director[0];
+  const result = await captureSignature({ defaultName: dir?.name || '', title: `Sign — ${doc.label}` });
+  if (!result) return;
+  try {
+    const existing = store.Signature.find((s) => s.docKey === doc.docKey);
+    await saveRecord('Signature', {
+      ...(existing ? { id: existing.id } : {}),
+      docKey: doc.docKey, signerName: result.name, method: result.method,
+      dataUrl: result.dataUrl, signedDate: new Date().toISOString().slice(0, 10),
+    });
+    toast('Signed. The signature will appear on the generated PDF.', 'success');
+    render(currentRoute()); // refresh so buttons show "Re-sign"
+  } catch (err) {
+    toast(`Couldn't save signature: ${err.message}`, 'error');
+  }
 }
 
 // --- section views ---------------------------------------------------------
@@ -395,35 +427,62 @@ function wireGroupRow(el, group, redraw) {
   });
 }
 
-// Registry / status view (spec Phase 6).
-function renderRegistry() {
-  const entries = store.DocumentRegistryEntry;
+// Overview / dashboard — intro + per-corp completeness + group structure.
+function renderOverview() {
+  const corp = activeCorp();
+  const intro = `<p class="intro">Your corporate minute book. Use the sections on the left to
+    maintain records, generate resolutions and registers, and upload supporting documents.
+    Switch corporations with the selector at the top-left.</p>`;
+
+  if (!corp) {
+    $main.innerHTML = `${sectionHeader(SECTIONS.overview)}${intro}
+      <p class="doc-gate">Add a corporation to get started — go to
+        <a href="#/corp-info">Corporation Info</a>.</p>`;
+    return;
+  }
+
+  // Completeness stats for the active corp.
+  const corpComplete = ['legalName', 'corporationNumber', 'jurisdiction', 'incorporationDate', 'registeredOffice']
+    .every((f) => corp[f]);
+  const holders = store.Shareholder.length;
+  const bankingSet = !!single('BankingInfo');
   const annuals = store.AnnualResolution;
+  const latestFY = annuals.map((a) => String(a.fiscalYearCovered || '')).sort().reverse()[0] || '—';
 
-  // Overdue: no signed annual resolution for the year that ended >6 months ago.
-  const overdueRows = computeOverdue(annuals);
+  const tile = (route, label, value, ok) => `
+    <a class="stat-tile" href="#/${route}">
+      <span class="stat-label">${esc(label)}</span>
+      <span class="stat-value ${ok === false ? 'warn' : ''}">${esc(value)}</span>
+    </a>`;
 
-  const rows = entries.length ? entries
-    .slice()
-    .sort((a, b) => String(b.dateSigned || '').localeCompare(String(a.dateSigned || '')))
-    .map((e) => `
-      <tr>
-        <td>${esc(e.documentType)}</td>
-        <td>${esc(e.periodCovered)}</td>
-        <td>${e.dateSigned ? esc(fmtDate(e.dateSigned)) : '—'}</td>
-        <td>${e.pdfGenerated ? '<span class="pill pill-ok">Complete</span>' : '<span class="pill">Not generated</span>'}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="4" class="empty">No documents generated yet.</td></tr>';
+  const tiles = [
+    tile('corp-info', 'Corporation Info', corpComplete ? 'Complete' : 'Incomplete', corpComplete),
+    tile('directors', 'Directors', String(store.Director.length), store.Director.length > 0),
+    tile('officers', 'Officers', String(store.Officer.length)),
+    tile('shares', 'Shares', `${store.ShareClass.length} class(es), ${holders} holder(s)`),
+    tile('banking', 'Banking', bankingSet ? 'Set up' : 'Not set'),
+    tile('annual', 'Annual Resolutions', `${annuals.length} — latest FY ${latestFY}`),
+    tile('documents', 'Documents', `${store.Document.length} file(s)`),
+  ].join('');
+
+  // Group structure.
+  const parent = corp.parentCorpId ? corps().find((c) => c.id === corp.parentCorpId) : null;
+  const subs = corps().filter((c) => c.parentCorpId === corp.id);
+  let groupHtml = '';
+  if (parent || subs.length) {
+    const lines = [];
+    if (parent) lines.push(`<div>Subsidiary of <strong>${esc(parent.legalName)}</strong></div>`);
+    if (subs.length) lines.push(`<div>Parent of: <strong>${esc(subs.map((s) => s.legalName).join(', '))}</strong></div>`);
+    groupHtml = `<div class="card"><h3 class="doc-h3" style="margin-top:0">Group structure</h3>${lines.join('')}</div>`;
+  }
 
   $main.innerHTML = `
-    ${sectionHeader(SECTIONS.registry, `<button class="btn btn-primary" id="new-annual">+ New Annual Resolution</button>`)}
-    ${overdueRows}
-    <table class="registry-table">
-      <thead><tr><th>Document</th><th>Period</th><th>Date Signed</th><th>Status</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    ${sectionHeader(SECTIONS.overview, `<button class="btn btn-primary" id="new-annual">+ New Annual Resolution</button>`)}
+    ${intro}
+    ${computeOverdue(annuals)}
+    ${groupHtml}
+    <div class="stat-grid">${tiles}</div>
   `;
-
   document.getElementById('new-annual').addEventListener('click', createNewAnnual);
 }
 
@@ -459,6 +518,297 @@ async function createNewAnnual() {
   navigate('annual');
 }
 
+// --- Documents / uploads view ----------------------------------------------
+
+const CUSTOM_CAT = '__custom__';
+function categoryOptions(scope) {
+  const opts = (DOC_CATEGORIES[scope] || []).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  return `${opts}<option value="${CUSTOM_CAT}">＋ Custom section…</option>`;
+}
+
+function renderDocuments() {
+  const docs = store.Document || [];
+  $main.innerHTML = `
+    ${sectionHeader(SECTIONS.documents)}
+    <form class="card" id="upload-form">
+      <div class="field">
+        <label for="doc-scope">Type</label>
+        <select id="doc-scope">
+          <option value="year">Year-specific (tax return, financial statements…)</option>
+          <option value="corporate">Corporate (articles, certificates…)</option>
+        </select>
+      </div>
+      <div class="field" id="doc-year-field">
+        <label for="doc-year">Fiscal Year</label>
+        <input id="doc-year" type="text" placeholder="e.g. 2025" />
+      </div>
+      <div class="field">
+        <label for="doc-category">Section</label>
+        <select id="doc-category">${categoryOptions('year')}</select>
+      </div>
+      <div class="field" id="doc-category-custom-field" style="display:none">
+        <label for="doc-category-custom">New section name</label>
+        <input id="doc-category-custom" type="text" placeholder="e.g. Balance Sheets" />
+      </div>
+      <div class="field">
+        <label for="doc-file">File</label>
+        <input id="doc-file" type="file" />
+      </div>
+      <div class="field">
+        <label for="doc-description">Description</label>
+        <input id="doc-description" type="text" placeholder="Plain-English: what is this file? (e.g. Year-end balance sheet)" />
+      </div>
+      <label class="chk"><input type="checkbox" id="doc-attest" />
+        <span>I confirm these documents are complete and correct.</span></label>
+      <div class="card-actions">
+        <button type="submit" class="btn btn-primary" id="doc-upload-btn">Upload</button>
+        <span id="doc-upload-status" class="field-help"></span>
+      </div>
+    </form>
+    <div id="doc-list"></div>
+  `;
+
+  const scopeSel = document.getElementById('doc-scope');
+  const yearField = document.getElementById('doc-year-field');
+  const catSel = document.getElementById('doc-category');
+  const customField = document.getElementById('doc-category-custom-field');
+  const toggleCustom = () => { customField.style.display = catSel.value === CUSTOM_CAT ? '' : 'none'; };
+  scopeSel.addEventListener('change', () => {
+    const scope = scopeSel.value;
+    yearField.style.display = scope === 'year' ? '' : 'none';
+    catSel.innerHTML = categoryOptions(scope);
+    toggleCustom();
+  });
+  catSel.addEventListener('change', toggleCustom);
+
+  document.getElementById('upload-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    handleUpload();
+  });
+
+  renderDocList(docs);
+}
+
+function renderDocList(docs) {
+  const list = document.getElementById('doc-list');
+  if (!list) return;
+  if (!docs.length) {
+    list.innerHTML = `<p class="empty">No documents uploaded yet.</p>`;
+    return;
+  }
+  const corporate = docs.filter((d) => d.scope === 'corporate');
+  const byYear = {};
+  docs.filter((d) => d.scope === 'year').forEach((d) => {
+    (byYear[d.fiscalYear || 'Unfiled'] ||= []).push(d);
+  });
+  const years = Object.keys(byYear).sort((a, b) => String(b).localeCompare(String(a)));
+
+  const row = (d) => `
+    <tr>
+      <td>${esc(d.category || '—')}</td>
+      <td>
+        <div class="doc-desc">${esc(d.description || '(no description)')}</div>
+        <div class="doc-fname">${esc(d.fileName || '')}</div>
+      </td>
+      <td>${d.attestationConfirmed ? '<span class="pill pill-ok">Confirmed</span>' : '—'}</td>
+      <td class="doc-cell-actions">
+        <button class="btn btn-doc" data-dl="${esc(d.id)}">Download</button>
+        <button class="btn btn-danger" data-del="${esc(d.id)}">Delete</button>
+      </td>
+    </tr>`;
+  const table = (rows) => `<table class="registry-table"><thead><tr>
+      <th>Section</th><th>Document</th><th>Attestation</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+
+  let html = '';
+  if (corporate.length) html += `<h3 class="doc-h3">Corporate documents</h3>${table(corporate.map(row).join(''))}`;
+  for (const y of years) html += `<h3 class="doc-h3">FY ${esc(y)}</h3>${table(byYear[y].map(row).join(''))}`;
+  list.innerHTML = html;
+
+  list.querySelectorAll('[data-dl]').forEach((b) => b.addEventListener('click', () => downloadDoc(b.getAttribute('data-dl'))));
+  list.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => deleteDoc(b.getAttribute('data-del'))));
+}
+
+async function handleUpload() {
+  const scope = document.getElementById('doc-scope').value;
+  const fiscalYear = document.getElementById('doc-year').value.trim();
+  let category = document.getElementById('doc-category').value;
+  const description = document.getElementById('doc-description').value.trim();
+  const fileEl = document.getElementById('doc-file');
+  const attest = document.getElementById('doc-attest').checked;
+  const file = fileEl.files[0];
+  const btn = document.getElementById('doc-upload-btn');
+  const status = document.getElementById('doc-upload-status');
+
+  if (!file) { toast('Choose a file to upload.', 'error'); return; }
+  if (scope === 'year' && !fiscalYear) { toast('Enter the fiscal year.', 'error'); return; }
+  if (category === CUSTOM_CAT) {
+    category = document.getElementById('doc-category-custom').value.trim();
+    if (!category) { toast('Name the custom section.', 'error'); return; }
+  }
+
+  btn.disabled = true; btn.textContent = 'Uploading…'; status.textContent = '';
+  try {
+    const corpId = store.activeCorpId;
+    const key = buildKey({ corpId, scope, fiscalYear, category, fileName: file.name });
+    await storage.upload(key, file);
+    // Only look up the signed-in email when auth is configured (avoids loading
+    // Amplify in local mode).
+    const email = (await authEnabled()) ? await currentEmail().catch(() => null) : null;
+    const now = new Date().toISOString();
+    await saveRecord('Document', {
+      scope, fiscalYear: scope === 'year' ? fiscalYear : null, category,
+      title: file.name, description: description || null,
+      fileName: file.name, s3Key: key,
+      contentType: file.type, size: file.size, uploadedBy: email || 'local',
+      attestationConfirmed: attest,
+      attestationBy: attest ? (email || 'local') : null,
+      attestationAt: attest ? now : null,
+    });
+    toast('Uploaded.', 'success');
+    fileEl.value = '';
+    document.getElementById('doc-description').value = '';
+    document.getElementById('doc-attest').checked = false;
+    renderDocList(store.Document);
+  } catch (err) {
+    console.error(err);
+    toast(`Upload failed: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Upload';
+  }
+}
+
+async function downloadDoc(id) {
+  const d = store.Document.find((r) => r.id === id);
+  if (!d) return;
+  try {
+    const url = await storage.url(d.s3Key);
+    if (!url) { toast('File not found.', 'error'); return; }
+    const a = document.createElement('a');
+    a.href = url; a.download = d.fileName || 'document'; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (err) { toast(`Couldn't open file: ${err.message}`, 'error'); }
+}
+
+async function deleteDoc(id) {
+  const d = store.Document.find((r) => r.id === id);
+  if (!d) return;
+  if (!confirm(`Delete "${d.fileName}"? This removes the file and its record.`)) return;
+  try {
+    await storage.remove(d.s3Key).catch((e) => console.warn('storage remove:', e));
+    await deleteRecord('Document', id);
+    renderDocList(store.Document);
+    toast('Deleted.', 'info');
+  } catch (err) { toast(`Couldn't delete: ${err.message}`, 'error'); }
+}
+
+// --- Annual Minute Book view ------------------------------------------------
+
+// Years that have any recorded activity, newest first (for the year picker).
+function knownYears() {
+  const years = new Set();
+  const grab = (v) => { const m = String(v || '').match(/\d{4}/); if (m) years.add(m[0]); };
+  store.AnnualResolution.forEach((a) => grab(a.fiscalYearCovered));
+  store.ShareholdersMeeting.forEach((m) => grab(m.fiscalYear));
+  store.Document.forEach((doc) => grab(doc.fiscalYear));
+  store.AdHocResolution.forEach((r) => grab(r.date));
+  return [...years].sort().reverse();
+}
+
+function renderMinuteBook() {
+  const years = knownYears();
+  const books = store.Document.filter((doc) => doc.category === MINUTE_BOOK_CATEGORY);
+
+  const bookRows = books.length ? books
+    .slice()
+    .sort((a, b) => String(b.fiscalYear || '').localeCompare(String(a.fiscalYear || '')))
+    .map((b) => `
+      <tr>
+        <td>FY ${esc(b.fiscalYear || '—')}</td>
+        <td>
+          <div class="doc-desc">${esc(b.description || b.fileName || '—')}</div>
+          <div class="doc-fname">${esc(b.fileName || '')}</div>
+        </td>
+        <td>${esc(fmtDate(String(b.createdAt || '').slice(0, 10)))}</td>
+        <td class="doc-cell-actions">
+          <button class="btn btn-doc" data-dl="${esc(b.id)}">Download</button>
+          <button class="btn btn-danger" data-del="${esc(b.id)}">Delete</button>
+        </td>
+      </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">No minute books compiled yet.</td></tr>';
+
+  $main.innerHTML = `
+    ${sectionHeader(SECTIONS['minute-book'])}
+    <p class="intro">Compile everything recorded for a fiscal year — corporate info, registers,
+    signed resolutions and minutes, and the index of uploaded documents — into a single locked PDF,
+    stored in that year's own folder in secure storage.</p>
+    <form class="card" id="mb-form">
+      <div class="field">
+        <label for="mb-year">Fiscal Year</label>
+        <input id="mb-year" type="text" list="mb-years" placeholder="e.g. 2025" value="${esc(years[0] || '')}" />
+        <datalist id="mb-years">${years.map((y) => `<option value="${esc(y)}"></option>`).join('')}</datalist>
+      </div>
+      <div class="card-actions">
+        <button type="submit" class="btn btn-primary" id="mb-generate">📕 Compile, Lock &amp; Store</button>
+      </div>
+      <p class="field-help">The PDF is permission-locked (view/print, no editing) and uploaded to
+      <code>minute-book/&lt;year&gt;/</code> for this corporation. You'll also get a copy to save locally.</p>
+    </form>
+    <h3 class="doc-h3">Stored minute books</h3>
+    <table class="registry-table">
+      <thead><tr><th>Year</th><th>Document</th><th>Compiled</th><th></th></tr></thead>
+      <tbody>${bookRows}</tbody>
+    </table>
+  `;
+
+  document.getElementById('mb-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    handleMinuteBook();
+  });
+  $main.querySelectorAll('[data-dl]').forEach((b) => b.addEventListener('click', () => downloadDoc(b.getAttribute('data-dl'))));
+  $main.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => deleteDoc(b.getAttribute('data-del'))));
+}
+
+async function handleMinuteBook() {
+  const fy = document.getElementById('mb-year').value.trim();
+  if (!/^\d{4}$/.test(fy)) { toast('Enter a 4-digit fiscal year.', 'error'); return; }
+  const btn = document.getElementById('mb-generate');
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Compiling…';
+  try {
+    const { html, label } = compileMinuteBook(fy);
+    const fname = `Annual_Minute_Book_FY${fy}.pdf`;
+    const blob = await buildPdf(html, fname, { locked: true });
+
+    // Store in the year's own minute-book folder for this corporation.
+    const corpId = store.activeCorpId;
+    const key = `${corpId}/minute-book/${fy}/${Date.now()}-${fname}`;
+    const file = new File([blob], fname, { type: 'application/pdf' });
+    await storage.upload(key, file);
+
+    const email = (await authEnabled()) ? await currentEmail().catch(() => null) : null;
+    await saveRecord('Document', {
+      scope: 'year', fiscalYear: fy, category: MINUTE_BOOK_CATEGORY,
+      title: label, description: label,
+      fileName: fname, s3Key: key, contentType: 'application/pdf', size: blob.size,
+      uploadedBy: email || 'local',
+      attestationConfirmed: false, attestationBy: null, attestationAt: null,
+    });
+
+    // Also hand the user a copy (share sheet on iPad, download elsewhere).
+    const disposition = await saveOrShare(blob, fname);
+    toast(disposition === 'cancelled'
+      ? 'Minute book stored in the cloud (local save cancelled).'
+      : 'Minute book compiled, locked, and stored.', 'success');
+    renderMinuteBook();
+  } catch (err) {
+    console.error(err);
+    toast(`Couldn't compile the minute book: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = prev;
+  }
+}
+
 // --- top-level render ------------------------------------------------------
 
 function render(route) {
@@ -467,7 +817,10 @@ function render(route) {
   const section = SECTIONS[route];
   if (!section) return;
 
-  // Every section except Corporation Info needs an active corp to scope to.
+  if (section.view === 'overview') return renderOverview();
+
+  // Every data section needs an active corp to scope to (Overview and
+  // Corporation Info handle the no-corp case themselves).
   if (route !== 'corp-info' && !store.activeCorpId) {
     $main.innerHTML = `
       ${sectionHeader(section)}
@@ -476,7 +829,8 @@ function render(route) {
     return;
   }
 
-  if (section.view === 'registry') return renderRegistry();
+  if (section.view === 'documents') return renderDocuments();
+  if (section.view === 'minute-book') return renderMinuteBook();
   if (section.groups) return renderGroups(route, section);
   if (section.repeatable) return renderRepeatable(route, section);
   return renderSingle(route, section);
@@ -523,8 +877,8 @@ async function boot() {
   renderSignOut();
 
   // Re-render current section when the store changes from elsewhere.
-  onChange(() => { /* views manage their own refresh; registry benefits */
-    if (currentRoute() === 'registry') renderRegistry();
+  onChange(() => { /* views manage their own refresh; overview benefits */
+    if (currentRoute() === 'overview') renderOverview();
   });
 }
 
