@@ -2,7 +2,7 @@
 // view (single form / repeatable rows / grouped / registry), and handles
 // save, delete, and PDF generation. Single-page app with hash routing.
 
-import { SECTIONS, NAV_ORDER, DOC_CATEGORIES } from './schema.js';
+import { SECTIONS, NAV_ORDER, NAV_GROUPS, DOC_CATEGORIES } from './schema.js';
 import { storage, buildKey } from './storage.js';
 import {
   store, hydrate, single, saveRecord, deleteRecord, onChange,
@@ -41,10 +41,14 @@ function toast(msg, type = 'info') {
 // --- navigation ------------------------------------------------------------
 
 function renderNav(active) {
-  $nav.innerHTML = NAV_ORDER.map((key) => {
-    const s = SECTIONS[key];
-    const on = key === active ? ' class="active"' : '';
-    return `<a href="#/${key}"${on}>${esc(s.label)}</a>`;
+  $nav.innerHTML = NAV_GROUPS.map((group) => {
+    const links = group.items.map((key) => {
+      const s = SECTIONS[key];
+      const on = key === active ? ' class="active"' : '';
+      return `<a href="#/${key}"${on}>${esc(s.label)}</a>`;
+    }).join('');
+    const heading = group.label ? `<div class="nav-group-label">${esc(group.label)}</div>` : '';
+    return `<div class="nav-group">${heading}${links}</div>`;
   }).join('');
 }
 
@@ -396,35 +400,62 @@ function wireGroupRow(el, group, redraw) {
   });
 }
 
-// Registry / status view (spec Phase 6).
-function renderRegistry() {
-  const entries = store.DocumentRegistryEntry;
+// Overview / dashboard — intro + per-corp completeness + group structure.
+function renderOverview() {
+  const corp = activeCorp();
+  const intro = `<p class="intro">Your corporate minute book. Use the sections on the left to
+    maintain records, generate resolutions and registers, and upload supporting documents.
+    Switch corporations with the selector at the top-left.</p>`;
+
+  if (!corp) {
+    $main.innerHTML = `${sectionHeader(SECTIONS.overview)}${intro}
+      <p class="doc-gate">Add a corporation to get started — go to
+        <a href="#/corp-info">Corporation Info</a>.</p>`;
+    return;
+  }
+
+  // Completeness stats for the active corp.
+  const corpComplete = ['legalName', 'corporationNumber', 'jurisdiction', 'incorporationDate', 'registeredOffice']
+    .every((f) => corp[f]);
+  const holders = store.Shareholder.length;
+  const bankingSet = !!single('BankingInfo');
   const annuals = store.AnnualResolution;
+  const latestFY = annuals.map((a) => String(a.fiscalYearCovered || '')).sort().reverse()[0] || '—';
 
-  // Overdue: no signed annual resolution for the year that ended >6 months ago.
-  const overdueRows = computeOverdue(annuals);
+  const tile = (route, label, value, ok) => `
+    <a class="stat-tile" href="#/${route}">
+      <span class="stat-label">${esc(label)}</span>
+      <span class="stat-value ${ok === false ? 'warn' : ''}">${esc(value)}</span>
+    </a>`;
 
-  const rows = entries.length ? entries
-    .slice()
-    .sort((a, b) => String(b.dateSigned || '').localeCompare(String(a.dateSigned || '')))
-    .map((e) => `
-      <tr>
-        <td>${esc(e.documentType)}</td>
-        <td>${esc(e.periodCovered)}</td>
-        <td>${e.dateSigned ? esc(fmtDate(e.dateSigned)) : '—'}</td>
-        <td>${e.pdfGenerated ? '<span class="pill pill-ok">Complete</span>' : '<span class="pill">Not generated</span>'}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="4" class="empty">No documents generated yet.</td></tr>';
+  const tiles = [
+    tile('corp-info', 'Corporation Info', corpComplete ? 'Complete' : 'Incomplete', corpComplete),
+    tile('directors', 'Directors', String(store.Director.length), store.Director.length > 0),
+    tile('officers', 'Officers', String(store.Officer.length)),
+    tile('shares', 'Shares', `${store.ShareClass.length} class(es), ${holders} holder(s)`),
+    tile('banking', 'Banking', bankingSet ? 'Set up' : 'Not set'),
+    tile('annual', 'Annual Resolutions', `${annuals.length} — latest FY ${latestFY}`),
+    tile('documents', 'Documents', `${store.Document.length} file(s)`),
+  ].join('');
+
+  // Group structure.
+  const parent = corp.parentCorpId ? corps().find((c) => c.id === corp.parentCorpId) : null;
+  const subs = corps().filter((c) => c.parentCorpId === corp.id);
+  let groupHtml = '';
+  if (parent || subs.length) {
+    const lines = [];
+    if (parent) lines.push(`<div>Subsidiary of <strong>${esc(parent.legalName)}</strong></div>`);
+    if (subs.length) lines.push(`<div>Parent of: <strong>${esc(subs.map((s) => s.legalName).join(', '))}</strong></div>`);
+    groupHtml = `<div class="card"><h3 class="doc-h3" style="margin-top:0">Group structure</h3>${lines.join('')}</div>`;
+  }
 
   $main.innerHTML = `
-    ${sectionHeader(SECTIONS.registry, `<button class="btn btn-primary" id="new-annual">+ New Annual Resolution</button>`)}
-    ${overdueRows}
-    <table class="registry-table">
-      <thead><tr><th>Document</th><th>Period</th><th>Date Signed</th><th>Status</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    ${sectionHeader(SECTIONS.overview, `<button class="btn btn-primary" id="new-annual">+ New Annual Resolution</button>`)}
+    ${intro}
+    ${computeOverdue(annuals)}
+    ${groupHtml}
+    <div class="stat-grid">${tiles}</div>
   `;
-
   document.getElementById('new-annual').addEventListener('click', createNewAnnual);
 }
 
@@ -652,7 +683,10 @@ function render(route) {
   const section = SECTIONS[route];
   if (!section) return;
 
-  // Every section except Corporation Info needs an active corp to scope to.
+  if (section.view === 'overview') return renderOverview();
+
+  // Every data section needs an active corp to scope to (Overview and
+  // Corporation Info handle the no-corp case themselves).
   if (route !== 'corp-info' && !store.activeCorpId) {
     $main.innerHTML = `
       ${sectionHeader(section)}
@@ -662,7 +696,6 @@ function render(route) {
   }
 
   if (section.view === 'documents') return renderDocuments();
-  if (section.view === 'registry') return renderRegistry();
   if (section.groups) return renderGroups(route, section);
   if (section.repeatable) return renderRepeatable(route, section);
   return renderSingle(route, section);
@@ -709,8 +742,8 @@ async function boot() {
   renderSignOut();
 
   // Re-render current section when the store changes from elsewhere.
-  onChange(() => { /* views manage their own refresh; registry benefits */
-    if (currentRoute() === 'registry') renderRegistry();
+  onChange(() => { /* views manage their own refresh; overview benefits */
+    if (currentRoute() === 'overview') renderOverview();
   });
 }
 

@@ -58,7 +58,24 @@ body {
 .nav a:hover { background: #1b222c; color: #fff; }
 .nav a.active { background: var(--accent); color: #fff; font-weight: 600; }
 
+.nav-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.nav-group-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #58616e; padding: 6px 12px 4px; }
+
 .sidebar-foot { margin-top: auto; font-size: 11px; color: #58616e; padding-top: 16px; }
+
+/* Overview / dashboard */
+.intro { color: var(--muted); font-size: 14px; max-width: 660px; margin: 0 0 18px; line-height: 1.55; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-top: 8px; }
+.stat-tile {
+  display: flex; flex-direction: column; gap: 5px; padding: 15px 16px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow); text-decoration: none; color: var(--ink); transition: border-color .12s;
+}
+.stat-tile:hover { border-color: var(--border-strong); }
+.stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.stat-value { font-size: 16px; font-weight: 600; }
+.stat-value.warn { color: var(--danger); }
+.doc-h3 { font-size: 15px; margin: 0 0 8px; color: var(--ink); }
 
 /* Corp switcher */
 .corp-switcher { margin-bottom: 16px; }

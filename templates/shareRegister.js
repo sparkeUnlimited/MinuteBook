@@ -12,7 +12,7 @@ export function shareRegister(data) {
   const classRows = classes.length ? classes.map((c) => `
     <tr>
       <td>${esc(c.className)}</td>
-      <td class="num">${esc(c.authorized)}</td>
+      <td class="num">${c.authorizedUnlimited ? 'Unlimited' : esc(c.authorized)}</td>
       <td class="num">${esc(c.issued)}</td>
       <td>${esc(c.rightsRestrictions || '—')}</td>
     </tr>`).join('') : '<tr><td colspan="4">[No share classes entered]</td></tr>';

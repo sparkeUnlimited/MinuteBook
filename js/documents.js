@@ -11,6 +11,7 @@ export function templateData() {
   return {
     corp: activeCorp(),
     directors: store.Director,
+    officers: store.Officer,
     shareClasses: store.ShareClass,
     shareholders: store.Shareholder,
     banking: single('BankingInfo'),
@@ -35,6 +36,13 @@ export function documentsFor(sectionKey, record) {
         id: 'director-register', label: 'Register of Directors',
         build: () => T.directorRegister(d),
         registryType: 'Register of Directors',
+        periodCovered: 'Current',
+      }];
+    case 'officers':
+      return [{
+        id: 'officer-register', label: 'Register of Officers',
+        build: () => T.officerRegister(d),
+        registryType: 'Register of Officers',
         periodCovered: 'Current',
       }];
     case 'shares':
