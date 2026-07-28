@@ -1,11 +1,16 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Minute Book — AppSync + DynamoDB backend (Cognito user-pool auth).",
+  "Description": "Minute Book — AppSync + DynamoDB + S3 backend with Cognito group roles (Owners / Accountants).",
   "Parameters": {
     "UserPoolId": {
       "Type": "String",
       "Default": "us-east-1_iQ2q3z7ep",
       "Description": "Existing Cognito user pool id to authorize the API."
+    },
+    "UserPoolClientId": {
+      "Type": "String",
+      "Default": "6sdk3tr7ou04ggjv0pdvclq36i",
+      "Description": "Existing user-pool app client id (public web client), for the Identity Pool."
     },
     "CognitoRegion": {
       "Type": "String",
@@ -41,7 +46,7 @@
             "ApiId"
           ]
         },
-        "Definition": "type CorpInfo {\n  id: ID!\n  legalName: String\n  tradeNames: [String]\n  corporationNumber: String\n  businessNumber: String\n  jurisdiction: String\n  incorporationDate: AWSDate\n  registeredOffice: String\n  mailingAddress: String\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype CorpInfoConnection {\n  items: [CorpInfo!]!\n  nextToken: String\n}\ninput CreateCorpInfoInput {\n  id: ID\n  legalName: String\n  tradeNames: [String]\n  corporationNumber: String\n  businessNumber: String\n  jurisdiction: String\n  incorporationDate: AWSDate\n  registeredOffice: String\n  mailingAddress: String\n}\ninput UpdateCorpInfoInput {\n  id: ID!\n  legalName: String\n  tradeNames: [String]\n  corporationNumber: String\n  businessNumber: String\n  jurisdiction: String\n  incorporationDate: AWSDate\n  registeredOffice: String\n  mailingAddress: String\n}\ninput DeleteCorpInfoInput {\n  id: ID!\n}\n\ntype Director {\n  id: ID!\n  name: String\n  address: String\n  titles: [String]\n  appointmentDate: AWSDate\n  isSoleDirector: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype DirectorConnection {\n  items: [Director!]!\n  nextToken: String\n}\ninput CreateDirectorInput {\n  id: ID\n  name: String\n  address: String\n  titles: [String]\n  appointmentDate: AWSDate\n  isSoleDirector: Boolean\n}\ninput UpdateDirectorInput {\n  id: ID!\n  name: String\n  address: String\n  titles: [String]\n  appointmentDate: AWSDate\n  isSoleDirector: Boolean\n}\ninput DeleteDirectorInput {\n  id: ID!\n}\n\ntype ShareClass {\n  id: ID!\n  className: String\n  authorized: Int\n  issued: Int\n  rightsRestrictions: String\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype ShareClassConnection {\n  items: [ShareClass!]!\n  nextToken: String\n}\ninput CreateShareClassInput {\n  id: ID\n  className: String\n  authorized: Int\n  issued: Int\n  rightsRestrictions: String\n}\ninput UpdateShareClassInput {\n  id: ID!\n  className: String\n  authorized: Int\n  issued: Int\n  rightsRestrictions: String\n}\ninput DeleteShareClassInput {\n  id: ID!\n}\n\ntype Shareholder {\n  id: ID!\n  name: String\n  shareClassId: ID\n  quantity: Int\n  certificateNumber: String\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype ShareholderConnection {\n  items: [Shareholder!]!\n  nextToken: String\n}\ninput CreateShareholderInput {\n  id: ID\n  name: String\n  shareClassId: ID\n  quantity: Int\n  certificateNumber: String\n}\ninput UpdateShareholderInput {\n  id: ID!\n  name: String\n  shareClassId: ID\n  quantity: Int\n  certificateNumber: String\n}\ninput DeleteShareholderInput {\n  id: ID!\n}\n\ntype BankingInfo {\n  id: ID!\n  bankName: String\n  branchAddress: String\n  signingOfficers: [String]\n  accountTypes: [String]\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype BankingInfoConnection {\n  items: [BankingInfo!]!\n  nextToken: String\n}\ninput CreateBankingInfoInput {\n  id: ID\n  bankName: String\n  branchAddress: String\n  signingOfficers: [String]\n  accountTypes: [String]\n}\ninput UpdateBankingInfoInput {\n  id: ID!\n  bankName: String\n  branchAddress: String\n  signingOfficers: [String]\n  accountTypes: [String]\n}\ninput DeleteBankingInfoInput {\n  id: ID!\n}\n\ntype AnnualResolution {\n  id: ID!\n  fiscalYearCovered: String\n  financialStatementsApproved: Boolean\n  directorContinuation: Boolean\n  dividendDeclared: Boolean\n  dividendAmount: Float\n  dividendClass: String\n  auditWaiver: Boolean\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype AnnualResolutionConnection {\n  items: [AnnualResolution!]!\n  nextToken: String\n}\ninput CreateAnnualResolutionInput {\n  id: ID\n  fiscalYearCovered: String\n  financialStatementsApproved: Boolean\n  directorContinuation: Boolean\n  dividendDeclared: Boolean\n  dividendAmount: Float\n  dividendClass: String\n  auditWaiver: Boolean\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput UpdateAnnualResolutionInput {\n  id: ID!\n  fiscalYearCovered: String\n  financialStatementsApproved: Boolean\n  directorContinuation: Boolean\n  dividendDeclared: Boolean\n  dividendAmount: Float\n  dividendClass: String\n  auditWaiver: Boolean\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput DeleteAnnualResolutionInput {\n  id: ID!\n}\n\ntype AdHocResolution {\n  id: ID!\n  type: String\n  customTitle: String\n  date: AWSDate\n  details: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype AdHocResolutionConnection {\n  items: [AdHocResolution!]!\n  nextToken: String\n}\ninput CreateAdHocResolutionInput {\n  id: ID\n  type: String\n  customTitle: String\n  date: AWSDate\n  details: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput UpdateAdHocResolutionInput {\n  id: ID!\n  type: String\n  customTitle: String\n  date: AWSDate\n  details: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput DeleteAdHocResolutionInput {\n  id: ID!\n}\n\ntype DocumentRegistryEntry {\n  id: ID!\n  documentId: ID\n  documentType: String\n  periodCovered: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype DocumentRegistryEntryConnection {\n  items: [DocumentRegistryEntry!]!\n  nextToken: String\n}\ninput CreateDocumentRegistryEntryInput {\n  id: ID\n  documentId: ID\n  documentType: String\n  periodCovered: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput UpdateDocumentRegistryEntryInput {\n  id: ID!\n  documentId: ID\n  documentType: String\n  periodCovered: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput DeleteDocumentRegistryEntryInput {\n  id: ID!\n}\n\ntype Query {\n  getCorpInfo(id: ID!): CorpInfo\n  listCorpInfos(limit: Int, nextToken: String): CorpInfoConnection\n  getDirector(id: ID!): Director\n  listDirectors(limit: Int, nextToken: String): DirectorConnection\n  getShareClass(id: ID!): ShareClass\n  listShareClasses(limit: Int, nextToken: String): ShareClassConnection\n  getShareholder(id: ID!): Shareholder\n  listShareholders(limit: Int, nextToken: String): ShareholderConnection\n  getBankingInfo(id: ID!): BankingInfo\n  listBankingInfos(limit: Int, nextToken: String): BankingInfoConnection\n  getAnnualResolution(id: ID!): AnnualResolution\n  listAnnualResolutions(limit: Int, nextToken: String): AnnualResolutionConnection\n  getAdHocResolution(id: ID!): AdHocResolution\n  listAdHocResolutions(limit: Int, nextToken: String): AdHocResolutionConnection\n  getDocumentRegistryEntry(id: ID!): DocumentRegistryEntry\n  listDocumentRegistryEntries(limit: Int, nextToken: String): DocumentRegistryEntryConnection\n}\n\ntype Mutation {\n  createCorpInfo(input: CreateCorpInfoInput!): CorpInfo\n  updateCorpInfo(input: UpdateCorpInfoInput!): CorpInfo\n  deleteCorpInfo(input: DeleteCorpInfoInput!): CorpInfo\n  createDirector(input: CreateDirectorInput!): Director\n  updateDirector(input: UpdateDirectorInput!): Director\n  deleteDirector(input: DeleteDirectorInput!): Director\n  createShareClass(input: CreateShareClassInput!): ShareClass\n  updateShareClass(input: UpdateShareClassInput!): ShareClass\n  deleteShareClass(input: DeleteShareClassInput!): ShareClass\n  createShareholder(input: CreateShareholderInput!): Shareholder\n  updateShareholder(input: UpdateShareholderInput!): Shareholder\n  deleteShareholder(input: DeleteShareholderInput!): Shareholder\n  createBankingInfo(input: CreateBankingInfoInput!): BankingInfo\n  updateBankingInfo(input: UpdateBankingInfoInput!): BankingInfo\n  deleteBankingInfo(input: DeleteBankingInfoInput!): BankingInfo\n  createAnnualResolution(input: CreateAnnualResolutionInput!): AnnualResolution\n  updateAnnualResolution(input: UpdateAnnualResolutionInput!): AnnualResolution\n  deleteAnnualResolution(input: DeleteAnnualResolutionInput!): AnnualResolution\n  createAdHocResolution(input: CreateAdHocResolutionInput!): AdHocResolution\n  updateAdHocResolution(input: UpdateAdHocResolutionInput!): AdHocResolution\n  deleteAdHocResolution(input: DeleteAdHocResolutionInput!): AdHocResolution\n  createDocumentRegistryEntry(input: CreateDocumentRegistryEntryInput!): DocumentRegistryEntry\n  updateDocumentRegistryEntry(input: UpdateDocumentRegistryEntryInput!): DocumentRegistryEntry\n  deleteDocumentRegistryEntry(input: DeleteDocumentRegistryEntryInput!): DocumentRegistryEntry\n}\n\nschema {\n  query: Query\n  mutation: Mutation\n}\n"
+        "Definition": "type CorpInfo {\n  id: ID!\n  legalName: String\n  tradeNames: [String]\n  corporationNumber: String\n  businessNumber: String\n  jurisdiction: String\n  incorporationDate: AWSDate\n  registeredOffice: String\n  mailingAddress: String\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype CorpInfoConnection {\n  items: [CorpInfo!]!\n  nextToken: String\n}\ninput CreateCorpInfoInput {\n  id: ID\n  legalName: String\n  tradeNames: [String]\n  corporationNumber: String\n  businessNumber: String\n  jurisdiction: String\n  incorporationDate: AWSDate\n  registeredOffice: String\n  mailingAddress: String\n}\ninput UpdateCorpInfoInput {\n  id: ID!\n  legalName: String\n  tradeNames: [String]\n  corporationNumber: String\n  businessNumber: String\n  jurisdiction: String\n  incorporationDate: AWSDate\n  registeredOffice: String\n  mailingAddress: String\n}\ninput DeleteCorpInfoInput {\n  id: ID!\n}\n\ntype Director {\n  id: ID!\n  name: String\n  address: String\n  titles: [String]\n  appointmentDate: AWSDate\n  isSoleDirector: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype DirectorConnection {\n  items: [Director!]!\n  nextToken: String\n}\ninput CreateDirectorInput {\n  id: ID\n  name: String\n  address: String\n  titles: [String]\n  appointmentDate: AWSDate\n  isSoleDirector: Boolean\n}\ninput UpdateDirectorInput {\n  id: ID!\n  name: String\n  address: String\n  titles: [String]\n  appointmentDate: AWSDate\n  isSoleDirector: Boolean\n}\ninput DeleteDirectorInput {\n  id: ID!\n}\n\ntype ShareClass {\n  id: ID!\n  className: String\n  authorized: Int\n  authorizedUnlimited: Boolean\n  issued: Int\n  rightsRestrictions: String\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype ShareClassConnection {\n  items: [ShareClass!]!\n  nextToken: String\n}\ninput CreateShareClassInput {\n  id: ID\n  className: String\n  authorized: Int\n  authorizedUnlimited: Boolean\n  issued: Int\n  rightsRestrictions: String\n}\ninput UpdateShareClassInput {\n  id: ID!\n  className: String\n  authorized: Int\n  authorizedUnlimited: Boolean\n  issued: Int\n  rightsRestrictions: String\n}\ninput DeleteShareClassInput {\n  id: ID!\n}\n\ntype Shareholder {\n  id: ID!\n  name: String\n  shareClassId: ID\n  quantity: Int\n  certificateNumber: String\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype ShareholderConnection {\n  items: [Shareholder!]!\n  nextToken: String\n}\ninput CreateShareholderInput {\n  id: ID\n  name: String\n  shareClassId: ID\n  quantity: Int\n  certificateNumber: String\n}\ninput UpdateShareholderInput {\n  id: ID!\n  name: String\n  shareClassId: ID\n  quantity: Int\n  certificateNumber: String\n}\ninput DeleteShareholderInput {\n  id: ID!\n}\n\ntype BankingInfo {\n  id: ID!\n  bankName: String\n  branchAddress: String\n  signingOfficers: [String]\n  accountTypes: [String]\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype BankingInfoConnection {\n  items: [BankingInfo!]!\n  nextToken: String\n}\ninput CreateBankingInfoInput {\n  id: ID\n  bankName: String\n  branchAddress: String\n  signingOfficers: [String]\n  accountTypes: [String]\n}\ninput UpdateBankingInfoInput {\n  id: ID!\n  bankName: String\n  branchAddress: String\n  signingOfficers: [String]\n  accountTypes: [String]\n}\ninput DeleteBankingInfoInput {\n  id: ID!\n}\n\ntype AnnualResolution {\n  id: ID!\n  fiscalYearCovered: String\n  financialStatementsApproved: Boolean\n  directorContinuation: Boolean\n  dividendDeclared: Boolean\n  dividendAmount: Float\n  dividendClass: String\n  auditWaiver: Boolean\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype AnnualResolutionConnection {\n  items: [AnnualResolution!]!\n  nextToken: String\n}\ninput CreateAnnualResolutionInput {\n  id: ID\n  fiscalYearCovered: String\n  financialStatementsApproved: Boolean\n  directorContinuation: Boolean\n  dividendDeclared: Boolean\n  dividendAmount: Float\n  dividendClass: String\n  auditWaiver: Boolean\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput UpdateAnnualResolutionInput {\n  id: ID!\n  fiscalYearCovered: String\n  financialStatementsApproved: Boolean\n  directorContinuation: Boolean\n  dividendDeclared: Boolean\n  dividendAmount: Float\n  dividendClass: String\n  auditWaiver: Boolean\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput DeleteAnnualResolutionInput {\n  id: ID!\n}\n\ntype AdHocResolution {\n  id: ID!\n  type: String\n  customTitle: String\n  date: AWSDate\n  details: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype AdHocResolutionConnection {\n  items: [AdHocResolution!]!\n  nextToken: String\n}\ninput CreateAdHocResolutionInput {\n  id: ID\n  type: String\n  customTitle: String\n  date: AWSDate\n  details: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput UpdateAdHocResolutionInput {\n  id: ID!\n  type: String\n  customTitle: String\n  date: AWSDate\n  details: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput DeleteAdHocResolutionInput {\n  id: ID!\n}\n\ntype DocumentRegistryEntry {\n  id: ID!\n  documentId: ID\n  documentType: String\n  periodCovered: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype DocumentRegistryEntryConnection {\n  items: [DocumentRegistryEntry!]!\n  nextToken: String\n}\ninput CreateDocumentRegistryEntryInput {\n  id: ID\n  documentId: ID\n  documentType: String\n  periodCovered: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput UpdateDocumentRegistryEntryInput {\n  id: ID!\n  documentId: ID\n  documentType: String\n  periodCovered: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput DeleteDocumentRegistryEntryInput {\n  id: ID!\n}\n\ntype Document {\n  id: ID!\n  scope: String\n  fiscalYear: String\n  category: String\n  title: String\n  fileName: String\n  s3Key: String\n  contentType: String\n  size: Int\n  uploadedBy: String\n  attestationConfirmed: Boolean\n  attestationBy: String\n  attestationAt: AWSDateTime\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype DocumentConnection {\n  items: [Document!]!\n  nextToken: String\n}\ninput CreateDocumentInput {\n  id: ID\n  scope: String\n  fiscalYear: String\n  category: String\n  title: String\n  fileName: String\n  s3Key: String\n  contentType: String\n  size: Int\n  uploadedBy: String\n  attestationConfirmed: Boolean\n  attestationBy: String\n  attestationAt: AWSDateTime\n}\ninput UpdateDocumentInput {\n  id: ID!\n  scope: String\n  fiscalYear: String\n  category: String\n  title: String\n  fileName: String\n  s3Key: String\n  contentType: String\n  size: Int\n  uploadedBy: String\n  attestationConfirmed: Boolean\n  attestationBy: String\n  attestationAt: AWSDateTime\n}\ninput DeleteDocumentInput {\n  id: ID!\n}\n\ntype ShareholdersMeeting {\n  id: ID!\n  fiscalYear: String\n  meetingDate: AWSDate\n  status: String\n  notes: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype ShareholdersMeetingConnection {\n  items: [ShareholdersMeeting!]!\n  nextToken: String\n}\ninput CreateShareholdersMeetingInput {\n  id: ID\n  fiscalYear: String\n  meetingDate: AWSDate\n  status: String\n  notes: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput UpdateShareholdersMeetingInput {\n  id: ID!\n  fiscalYear: String\n  meetingDate: AWSDate\n  status: String\n  notes: String\n  dateSigned: AWSDate\n  pdfGenerated: Boolean\n}\ninput DeleteShareholdersMeetingInput {\n  id: ID!\n}\n\ntype Officer {\n  id: ID!\n  name: String\n  office: String\n  appointmentDate: AWSDate\n  endDate: AWSDate\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype OfficerConnection {\n  items: [Officer!]!\n  nextToken: String\n}\ninput CreateOfficerInput {\n  id: ID\n  name: String\n  office: String\n  appointmentDate: AWSDate\n  endDate: AWSDate\n}\ninput UpdateOfficerInput {\n  id: ID!\n  name: String\n  office: String\n  appointmentDate: AWSDate\n  endDate: AWSDate\n}\ninput DeleteOfficerInput {\n  id: ID!\n}\n\ntype SignificantControlPerson {\n  id: ID!\n  name: String\n  address: String\n  dateOfBirth: AWSDate\n  controlType: String\n  controlDescription: String\n  controlStartDate: AWSDate\n  controlEndDate: AWSDate\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype SignificantControlPersonConnection {\n  items: [SignificantControlPerson!]!\n  nextToken: String\n}\ninput CreateSignificantControlPersonInput {\n  id: ID\n  name: String\n  address: String\n  dateOfBirth: AWSDate\n  controlType: String\n  controlDescription: String\n  controlStartDate: AWSDate\n  controlEndDate: AWSDate\n}\ninput UpdateSignificantControlPersonInput {\n  id: ID!\n  name: String\n  address: String\n  dateOfBirth: AWSDate\n  controlType: String\n  controlDescription: String\n  controlStartDate: AWSDate\n  controlEndDate: AWSDate\n}\ninput DeleteSignificantControlPersonInput {\n  id: ID!\n}\n\ntype ShareTransfer {\n  id: ID!\n  transferDate: AWSDate\n  shareClassId: ID\n  fromHolder: String\n  toHolder: String\n  quantity: Int\n  consideration: Float\n  certificateIssued: String\n  certificateCancelled: String\n  notes: String\n  createdAt: AWSDateTime\n  updatedAt: AWSDateTime\n}\ntype ShareTransferConnection {\n  items: [ShareTransfer!]!\n  nextToken: String\n}\ninput CreateShareTransferInput {\n  id: ID\n  transferDate: AWSDate\n  shareClassId: ID\n  fromHolder: String\n  toHolder: String\n  quantity: Int\n  consideration: Float\n  certificateIssued: String\n  certificateCancelled: String\n  notes: String\n}\ninput UpdateShareTransferInput {\n  id: ID!\n  transferDate: AWSDate\n  shareClassId: ID\n  fromHolder: String\n  toHolder: String\n  quantity: Int\n  consideration: Float\n  certificateIssued: String\n  certificateCancelled: String\n  notes: String\n}\ninput DeleteShareTransferInput {\n  id: ID!\n}\n\ntype Query {\n  getCorpInfo(id: ID!): CorpInfo\n  listCorpInfos(limit: Int, nextToken: String): CorpInfoConnection\n  getDirector(id: ID!): Director\n  listDirectors(limit: Int, nextToken: String): DirectorConnection\n  getShareClass(id: ID!): ShareClass\n  listShareClasses(limit: Int, nextToken: String): ShareClassConnection\n  getShareholder(id: ID!): Shareholder\n  listShareholders(limit: Int, nextToken: String): ShareholderConnection\n  getBankingInfo(id: ID!): BankingInfo\n  listBankingInfos(limit: Int, nextToken: String): BankingInfoConnection\n  getAnnualResolution(id: ID!): AnnualResolution\n  listAnnualResolutions(limit: Int, nextToken: String): AnnualResolutionConnection\n  getAdHocResolution(id: ID!): AdHocResolution\n  listAdHocResolutions(limit: Int, nextToken: String): AdHocResolutionConnection\n  getDocumentRegistryEntry(id: ID!): DocumentRegistryEntry\n  listDocumentRegistryEntries(limit: Int, nextToken: String): DocumentRegistryEntryConnection\n  getDocument(id: ID!): Document\n  listDocuments(limit: Int, nextToken: String): DocumentConnection\n  getShareholdersMeeting(id: ID!): ShareholdersMeeting\n  listShareholdersMeetings(limit: Int, nextToken: String): ShareholdersMeetingConnection\n  getOfficer(id: ID!): Officer\n  listOfficers(limit: Int, nextToken: String): OfficerConnection\n  getSignificantControlPerson(id: ID!): SignificantControlPerson\n  listSignificantControlPeople(limit: Int, nextToken: String): SignificantControlPersonConnection\n  getShareTransfer(id: ID!): ShareTransfer\n  listShareTransfers(limit: Int, nextToken: String): ShareTransferConnection\n}\n\ntype Mutation {\n  createCorpInfo(input: CreateCorpInfoInput!): CorpInfo @aws_auth(cognito_groups: [\"Owners\"])\n  updateCorpInfo(input: UpdateCorpInfoInput!): CorpInfo @aws_auth(cognito_groups: [\"Owners\"])\n  deleteCorpInfo(input: DeleteCorpInfoInput!): CorpInfo @aws_auth(cognito_groups: [\"Owners\"])\n  createDirector(input: CreateDirectorInput!): Director @aws_auth(cognito_groups: [\"Owners\"])\n  updateDirector(input: UpdateDirectorInput!): Director @aws_auth(cognito_groups: [\"Owners\"])\n  deleteDirector(input: DeleteDirectorInput!): Director @aws_auth(cognito_groups: [\"Owners\"])\n  createShareClass(input: CreateShareClassInput!): ShareClass @aws_auth(cognito_groups: [\"Owners\"])\n  updateShareClass(input: UpdateShareClassInput!): ShareClass @aws_auth(cognito_groups: [\"Owners\"])\n  deleteShareClass(input: DeleteShareClassInput!): ShareClass @aws_auth(cognito_groups: [\"Owners\"])\n  createShareholder(input: CreateShareholderInput!): Shareholder @aws_auth(cognito_groups: [\"Owners\"])\n  updateShareholder(input: UpdateShareholderInput!): Shareholder @aws_auth(cognito_groups: [\"Owners\"])\n  deleteShareholder(input: DeleteShareholderInput!): Shareholder @aws_auth(cognito_groups: [\"Owners\"])\n  createBankingInfo(input: CreateBankingInfoInput!): BankingInfo @aws_auth(cognito_groups: [\"Owners\"])\n  updateBankingInfo(input: UpdateBankingInfoInput!): BankingInfo @aws_auth(cognito_groups: [\"Owners\"])\n  deleteBankingInfo(input: DeleteBankingInfoInput!): BankingInfo @aws_auth(cognito_groups: [\"Owners\"])\n  createAnnualResolution(input: CreateAnnualResolutionInput!): AnnualResolution @aws_auth(cognito_groups: [\"Owners\"])\n  updateAnnualResolution(input: UpdateAnnualResolutionInput!): AnnualResolution @aws_auth(cognito_groups: [\"Owners\"])\n  deleteAnnualResolution(input: DeleteAnnualResolutionInput!): AnnualResolution @aws_auth(cognito_groups: [\"Owners\"])\n  createAdHocResolution(input: CreateAdHocResolutionInput!): AdHocResolution @aws_auth(cognito_groups: [\"Owners\"])\n  updateAdHocResolution(input: UpdateAdHocResolutionInput!): AdHocResolution @aws_auth(cognito_groups: [\"Owners\"])\n  deleteAdHocResolution(input: DeleteAdHocResolutionInput!): AdHocResolution @aws_auth(cognito_groups: [\"Owners\"])\n  createDocumentRegistryEntry(input: CreateDocumentRegistryEntryInput!): DocumentRegistryEntry @aws_auth(cognito_groups: [\"Owners\"])\n  updateDocumentRegistryEntry(input: UpdateDocumentRegistryEntryInput!): DocumentRegistryEntry @aws_auth(cognito_groups: [\"Owners\"])\n  deleteDocumentRegistryEntry(input: DeleteDocumentRegistryEntryInput!): DocumentRegistryEntry @aws_auth(cognito_groups: [\"Owners\"])\n  createDocument(input: CreateDocumentInput!): Document @aws_auth(cognito_groups: [\"Owners\", \"Accountants\"])\n  updateDocument(input: UpdateDocumentInput!): Document @aws_auth(cognito_groups: [\"Owners\", \"Accountants\"])\n  deleteDocument(input: DeleteDocumentInput!): Document @aws_auth(cognito_groups: [\"Owners\", \"Accountants\"])\n  createShareholdersMeeting(input: CreateShareholdersMeetingInput!): ShareholdersMeeting @aws_auth(cognito_groups: [\"Owners\"])\n  updateShareholdersMeeting(input: UpdateShareholdersMeetingInput!): ShareholdersMeeting @aws_auth(cognito_groups: [\"Owners\"])\n  deleteShareholdersMeeting(input: DeleteShareholdersMeetingInput!): ShareholdersMeeting @aws_auth(cognito_groups: [\"Owners\"])\n  createOfficer(input: CreateOfficerInput!): Officer @aws_auth(cognito_groups: [\"Owners\"])\n  updateOfficer(input: UpdateOfficerInput!): Officer @aws_auth(cognito_groups: [\"Owners\"])\n  deleteOfficer(input: DeleteOfficerInput!): Officer @aws_auth(cognito_groups: [\"Owners\"])\n  createSignificantControlPerson(input: CreateSignificantControlPersonInput!): SignificantControlPerson @aws_auth(cognito_groups: [\"Owners\"])\n  updateSignificantControlPerson(input: UpdateSignificantControlPersonInput!): SignificantControlPerson @aws_auth(cognito_groups: [\"Owners\"])\n  deleteSignificantControlPerson(input: DeleteSignificantControlPersonInput!): SignificantControlPerson @aws_auth(cognito_groups: [\"Owners\"])\n  createShareTransfer(input: CreateShareTransferInput!): ShareTransfer @aws_auth(cognito_groups: [\"Owners\"])\n  updateShareTransfer(input: UpdateShareTransferInput!): ShareTransfer @aws_auth(cognito_groups: [\"Owners\"])\n  deleteShareTransfer(input: DeleteShareTransferInput!): ShareTransfer @aws_auth(cognito_groups: [\"Owners\"])\n}\n\nschema {\n  query: Query\n  mutation: Mutation\n}\n"
       }
     },
     "AppSyncDynamoRole": {
@@ -121,6 +126,36 @@
                     {
                       "Fn::GetAtt": [
                         "DocumentRegistryEntryTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "DocumentTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ShareholdersMeetingTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "OfficerTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "SignificantControlPersonTable",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ShareTransferTable",
                         "Arn"
                       ]
                     }
@@ -1515,6 +1550,1058 @@
         },
         "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
       }
+    },
+    "DocumentTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-Document"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "DocumentDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "Document",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "DocumentTable"
+          }
+        }
+      }
+    },
+    "DocumentgetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getDocument",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DocumentDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DocumentlistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listDocuments",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DocumentDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "DocumentcreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createDocument",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DocumentDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DocumentupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateDocument",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DocumentDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  Object.keys(input).forEach((k) => {\n    if (k !== 'id') {\n      const nk = '#f' + sets.length;\n      const vk = ':v' + sets.length;\n      names[nk] = k;\n      values[vk] = input[k];\n      sets.push(nk + ' = ' + vk);\n    }\n  });\n  names['#updatedAt'] = 'updatedAt';\n  values[':updatedAt'] = util.time.nowISO8601();\n  sets.push('#updatedAt = :updatedAt');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "DocumentdelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteDocument",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "DocumentDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareholdersMeetingTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-ShareholdersMeeting"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "ShareholdersMeetingDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "ShareholdersMeeting",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "ShareholdersMeetingTable"
+          }
+        }
+      }
+    },
+    "ShareholdersMeetinggetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getShareholdersMeeting",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareholdersMeetingDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareholdersMeetinglistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listShareholdersMeetings",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareholdersMeetingDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "ShareholdersMeetingcreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createShareholdersMeeting",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareholdersMeetingDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareholdersMeetingupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateShareholdersMeeting",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareholdersMeetingDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  Object.keys(input).forEach((k) => {\n    if (k !== 'id') {\n      const nk = '#f' + sets.length;\n      const vk = ':v' + sets.length;\n      names[nk] = k;\n      values[vk] = input[k];\n      sets.push(nk + ' = ' + vk);\n    }\n  });\n  names['#updatedAt'] = 'updatedAt';\n  values[':updatedAt'] = util.time.nowISO8601();\n  sets.push('#updatedAt = :updatedAt');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareholdersMeetingdelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteShareholdersMeeting",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareholdersMeetingDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "OfficerTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-Officer"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "OfficerDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "Officer",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "OfficerTable"
+          }
+        }
+      }
+    },
+    "OfficergetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getOfficer",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "OfficerDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "OfficerlistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listOfficers",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "OfficerDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "OfficercreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createOfficer",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "OfficerDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "OfficerupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateOfficer",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "OfficerDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  Object.keys(input).forEach((k) => {\n    if (k !== 'id') {\n      const nk = '#f' + sets.length;\n      const vk = ':v' + sets.length;\n      names[nk] = k;\n      values[vk] = input[k];\n      sets.push(nk + ' = ' + vk);\n    }\n  });\n  names['#updatedAt'] = 'updatedAt';\n  values[':updatedAt'] = util.time.nowISO8601();\n  sets.push('#updatedAt = :updatedAt');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "OfficerdelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteOfficer",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "OfficerDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "SignificantControlPersonTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-SignificantControlPerson"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "SignificantControlPersonDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "SignificantControlPerson",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "SignificantControlPersonTable"
+          }
+        }
+      }
+    },
+    "SignificantControlPersongetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getSignificantControlPerson",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "SignificantControlPersonDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "SignificantControlPersonlistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listSignificantControlPeople",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "SignificantControlPersonDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "SignificantControlPersoncreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createSignificantControlPerson",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "SignificantControlPersonDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "SignificantControlPersonupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateSignificantControlPerson",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "SignificantControlPersonDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  Object.keys(input).forEach((k) => {\n    if (k !== 'id') {\n      const nk = '#f' + sets.length;\n      const vk = ':v' + sets.length;\n      names[nk] = k;\n      values[vk] = input[k];\n      sets.push(nk + ' = ' + vk);\n    }\n  });\n  names['#updatedAt'] = 'updatedAt';\n  values[':updatedAt'] = util.time.nowISO8601();\n  sets.push('#updatedAt = :updatedAt');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "SignificantControlPersondelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteSignificantControlPerson",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "SignificantControlPersonDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareTransferTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "${AWS::StackName}-ShareTransfer"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "ShareTransferDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "Name": "ShareTransfer",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "AppSyncDynamoRole",
+            "Arn"
+          ]
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "ShareTransferTable"
+          }
+        }
+      }
+    },
+    "ShareTransfergetResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "getShareTransfer",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareTransferDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'GetItem', key: util.dynamodb.toMapValues({ id: ctx.args.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareTransferlistResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Query",
+        "FieldName": "listShareTransfers",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareTransferDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'Scan', limit: ctx.args.limit || 1000, nextToken: ctx.args.nextToken };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return { items: ctx.result.items, nextToken: ctx.result.nextToken };\n}\n"
+      }
+    },
+    "ShareTransfercreateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "createShareTransfer",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareTransferDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id || util.autoId();\n  const now = util.time.nowISO8601();\n  const item = { createdAt: now, ...input, id, updatedAt: now };\n  return {\n    operation: 'PutItem',\n    key: util.dynamodb.toMapValues({ id }),\n    attributeValues: util.dynamodb.toMapValues(item),\n    condition: { expression: 'attribute_not_exists(id)' },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareTransferupdateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "updateShareTransfer",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareTransferDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  const input = ctx.args.input;\n  const id = input.id;\n  const names = {};\n  const values = {};\n  const sets = [];\n  Object.keys(input).forEach((k) => {\n    if (k !== 'id') {\n      const nk = '#f' + sets.length;\n      const vk = ':v' + sets.length;\n      names[nk] = k;\n      values[vk] = input[k];\n      sets.push(nk + ' = ' + vk);\n    }\n  });\n  names['#updatedAt'] = 'updatedAt';\n  values[':updatedAt'] = util.time.nowISO8601();\n  sets.push('#updatedAt = :updatedAt');\n  return {\n    operation: 'UpdateItem',\n    key: util.dynamodb.toMapValues({ id }),\n    update: {\n      expression: 'SET ' + sets.join(', '),\n      expressionNames: names,\n      expressionValues: util.dynamodb.toMapValues(values),\n    },\n  };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "ShareTransferdelResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "DependsOn": "GraphQLSchema",
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "GraphQLApi",
+            "ApiId"
+          ]
+        },
+        "TypeName": "Mutation",
+        "FieldName": "deleteShareTransfer",
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "ShareTransferDataSource",
+            "Name"
+          ]
+        },
+        "Runtime": {
+          "Name": "APPSYNC_JS",
+          "RuntimeVersion": "1.0.0"
+        },
+        "Code": "import { util } from '@aws-appsync/utils';\nexport function request(ctx) {\n  return { operation: 'DeleteItem', key: util.dynamodb.toMapValues({ id: ctx.args.input.id }) };\n}\nexport function response(ctx) {\n  if (ctx.error) util.error(ctx.error.message, ctx.error.type);\n  return ctx.result;\n}\n"
+      }
+    },
+    "OwnersGroup": {
+      "Type": "AWS::Cognito::UserPoolGroup",
+      "Properties": {
+        "GroupName": "Owners",
+        "UserPoolId": {
+          "Ref": "UserPoolId"
+        },
+        "Description": "Full read/write access to the minute book.",
+        "Precedence": 1
+      }
+    },
+    "AccountantsGroup": {
+      "Type": "AWS::Cognito::UserPoolGroup",
+      "Properties": {
+        "GroupName": "Accountants",
+        "UserPoolId": {
+          "Ref": "UserPoolId"
+        },
+        "Description": "Read-only on the minute book; can manage financial documents.",
+        "Precedence": 10
+      }
+    },
+    "FilesBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "${AWS::StackName}-files-${AWS::AccountId}"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "CorsConfiguration": {
+          "CorsRules": [
+            {
+              "AllowedHeaders": [
+                "*"
+              ],
+              "AllowedMethods": [
+                "GET",
+                "PUT",
+                "POST",
+                "DELETE",
+                "HEAD"
+              ],
+              "AllowedOrigins": [
+                "*"
+              ],
+              "ExposedHeaders": [
+                "ETag",
+                "x-amz-server-side-encryption",
+                "x-amz-request-id",
+                "x-amz-id-2"
+              ],
+              "MaxAge": 3000
+            }
+          ]
+        }
+      }
+    },
+    "IdentityPool": {
+      "Type": "AWS::Cognito::IdentityPool",
+      "Properties": {
+        "IdentityPoolName": {
+          "Fn::Sub": "${AWS::StackName}_identitypool"
+        },
+        "AllowUnauthenticatedIdentities": false,
+        "CognitoIdentityProviders": [
+          {
+            "ProviderName": {
+              "Fn::Sub": "cognito-idp.${CognitoRegion}.amazonaws.com/${UserPoolId}"
+            },
+            "ClientId": {
+              "Ref": "UserPoolClientId"
+            },
+            "ServerSideTokenCheck": false
+          }
+        ]
+      }
+    },
+    "FilesAuthRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "cognito-identity.amazonaws.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "cognito-identity.amazonaws.com:aud": {
+                    "Ref": "IdentityPool"
+                  }
+                },
+                "ForAnyValue:StringLike": {
+                  "cognito-identity.amazonaws.com:amr": "authenticated"
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "files-s3",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "${FilesBucket.Arn}/files/*"
+                    },
+                    {
+                      "Fn::Sub": "${FilesBucket.Arn}/minute-book/*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "FilesBucket",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": [
+                        "files/*",
+                        "minute-book/*"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "IdentityPoolRoleAttachment": {
+      "Type": "AWS::Cognito::IdentityPoolRoleAttachment",
+      "Properties": {
+        "IdentityPoolId": {
+          "Ref": "IdentityPool"
+        },
+        "Roles": {
+          "authenticated": {
+            "Fn::GetAtt": [
+              "FilesAuthRole",
+              "Arn"
+            ]
+          }
+        }
+      }
     }
   },
   "Outputs": {
@@ -1534,6 +2621,18 @@
           "GraphQLApi",
           "ApiId"
         ]
+      }
+    },
+    "FilesBucketName": {
+      "Description": "S3 bucket for uploaded files + minute books — set as MB_S3_BUCKET.",
+      "Value": {
+        "Ref": "FilesBucket"
+      }
+    },
+    "IdentityPoolId": {
+      "Description": "Cognito Identity Pool id — set as MB_IDENTITY_POOL_ID.",
+      "Value": {
+        "Ref": "IdentityPool"
       }
     },
     "Region": {

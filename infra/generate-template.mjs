@@ -40,7 +40,10 @@ const MODELS = {
   ShareClass: {
     plural: 'ShareClasses',
     fields: {
-      className: 'String', authorized: 'Int', issued: 'Int', rightsRestrictions: 'String',
+      // authorizedUnlimited=true means an unlimited number of authorized shares
+      // (common for Ontario corps); in that case `authorized` is ignored.
+      className: 'String', authorized: 'Int', authorizedUnlimited: 'Boolean',
+      issued: 'Int', rightsRestrictions: 'String',
     },
   },
   Shareholder: {
@@ -79,15 +82,56 @@ const MODELS = {
       dateSigned: 'AWSDate', pdfGenerated: 'Boolean',
     },
   },
-  // Financial documents uploaded by the accountant (or owner). Metadata only —
-  // the file itself lives in S3 (see FinancialsBucket). Both Owners and
-  // Accountants may write these; everything else is Owners-only.
-  FinancialDocument: {
-    plural: 'FinancialDocuments',
+  // Uploaded files (metadata only — the file lives in S3, see FilesBucket).
+  //   scope: 'year'      -> fiscalYear set (tax returns, financial statements,
+  //                         accountant package for that year)
+  //   scope: 'corporate' -> no year (articles of incorporation, certificates)
+  // Both Owners and Accountants may write these; everything else is Owners-only.
+  // Attestation captures the accountant's "these are correct" confirmation.
+  Document: {
+    plural: 'Documents',
     writeGroups: ['Owners', 'Accountants'],
     fields: {
-      fiscalYear: 'String', category: 'String', fileName: 'String',
-      s3Key: 'String', contentType: 'String', size: 'Int', uploadedBy: 'String',
+      scope: 'String', fiscalYear: 'String', category: 'String', title: 'String',
+      fileName: 'String', s3Key: 'String', contentType: 'String', size: 'Int',
+      uploadedBy: 'String',
+      attestationConfirmed: 'Boolean', attestationBy: 'String', attestationAt: 'AWSDateTime',
+    },
+  },
+  // Annual shareholders' meeting minutes log. status is one of
+  // 'no_updates' | 'continued_previous' | 'custom'.
+  ShareholdersMeeting: {
+    plural: 'ShareholdersMeetings',
+    fields: {
+      fiscalYear: 'String', meetingDate: 'AWSDate', status: 'String',
+      notes: 'String', dateSigned: 'AWSDate', pdfGenerated: 'Boolean',
+    },
+  },
+  // Officers register — distinct from directors.
+  Officer: {
+    plural: 'Officers',
+    fields: {
+      name: 'String', office: 'String', appointmentDate: 'AWSDate', endDate: 'AWSDate',
+    },
+  },
+  // Register of Individuals with Significant Control (Ontario transparency
+  // register requirement for private corporations since 2023).
+  SignificantControlPerson: {
+    plural: 'SignificantControlPeople',
+    fields: {
+      name: 'String', address: 'String', dateOfBirth: 'AWSDate',
+      controlType: 'String', controlDescription: 'String',
+      controlStartDate: 'AWSDate', controlEndDate: 'AWSDate',
+    },
+  },
+  // Securities/share transfer register — a running ledger of issuances and
+  // transfers (the Shareholder model holds only current holdings).
+  ShareTransfer: {
+    plural: 'ShareTransfers',
+    fields: {
+      transferDate: 'AWSDate', shareClassId: 'ID', fromHolder: 'String',
+      toHolder: 'String', quantity: 'Int', consideration: 'Float',
+      certificateIssued: 'String', certificateCancelled: 'String', notes: 'String',
     },
   },
 };
@@ -334,11 +378,13 @@ resources.AccountantsGroup = {
   },
 };
 
-// --- S3 bucket for financial files (folder per year: financials/{year}/) ----
-resources.FinancialsBucket = {
+// --- S3 bucket for uploaded files + compiled minute books -------------------
+//   files/{year}/{category}/...   files/corporate/{category}/...   (uploads)
+//   minute-book/{year}/...        (compiled, locked annual minute-book PDFs)
+resources.FilesBucket = {
   Type: 'AWS::S3::Bucket',
   Properties: {
-    BucketName: { 'Fn::Sub': '${AWS::StackName}-financials-${AWS::AccountId}' },
+    BucketName: { 'Fn::Sub': '${AWS::StackName}-files-${AWS::AccountId}' },
     BucketEncryption: {
       ServerSideEncryptionConfiguration: [
         { ServerSideEncryptionByDefault: { SSEAlgorithm: 'AES256' } },
@@ -364,9 +410,9 @@ resources.FinancialsBucket = {
 };
 
 // --- Cognito Identity Pool: exchanges a signed-in user-pool token for
-//     temporary AWS creds scoped to the financials/ prefix, so the browser can
-//     upload/download directly to S3 (via the Amplify Storage library). --------
-resources.FinancialsIdentityPool = {
+//     temporary AWS creds scoped to the files/ + minute-book/ prefixes, so the
+//     browser can upload/download to S3 (via the Amplify Storage library). -----
+resources.IdentityPool = {
   Type: 'AWS::Cognito::IdentityPool',
   Properties: {
     IdentityPoolName: { 'Fn::Sub': '${AWS::StackName}_identitypool' },
@@ -379,7 +425,7 @@ resources.FinancialsIdentityPool = {
   },
 };
 
-resources.FinancialsAuthRole = {
+resources.FilesAuthRole = {
   Type: 'AWS::IAM::Role',
   Properties: {
     AssumeRolePolicyDocument: {
@@ -389,26 +435,29 @@ resources.FinancialsAuthRole = {
         Principal: { Federated: 'cognito-identity.amazonaws.com' },
         Action: 'sts:AssumeRoleWithWebIdentity',
         Condition: {
-          StringEquals: { 'cognito-identity.amazonaws.com:aud': { Ref: 'FinancialsIdentityPool' } },
+          StringEquals: { 'cognito-identity.amazonaws.com:aud': { Ref: 'IdentityPool' } },
           'ForAnyValue:StringLike': { 'cognito-identity.amazonaws.com:amr': 'authenticated' },
         },
       }],
     },
     Policies: [{
-      PolicyName: 'financials-s3',
+      PolicyName: 'files-s3',
       PolicyDocument: {
         Version: '2012-10-17',
         Statement: [
           {
             Effect: 'Allow',
             Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-            Resource: { 'Fn::Sub': '${FinancialsBucket.Arn}/financials/*' },
+            Resource: [
+              { 'Fn::Sub': '${FilesBucket.Arn}/files/*' },
+              { 'Fn::Sub': '${FilesBucket.Arn}/minute-book/*' },
+            ],
           },
           {
             Effect: 'Allow',
             Action: ['s3:ListBucket'],
-            Resource: { 'Fn::GetAtt': ['FinancialsBucket', 'Arn'] },
-            Condition: { StringLike: { 's3:prefix': ['financials/*'] } },
+            Resource: { 'Fn::GetAtt': ['FilesBucket', 'Arn'] },
+            Condition: { StringLike: { 's3:prefix': ['files/*', 'minute-book/*'] } },
           },
         ],
       },
@@ -416,11 +465,11 @@ resources.FinancialsAuthRole = {
   },
 };
 
-resources.FinancialsIdentityPoolRoleAttachment = {
+resources.IdentityPoolRoleAttachment = {
   Type: 'AWS::Cognito::IdentityPoolRoleAttachment',
   Properties: {
-    IdentityPoolId: { Ref: 'FinancialsIdentityPool' },
-    Roles: { authenticated: { 'Fn::GetAtt': ['FinancialsAuthRole', 'Arn'] } },
+    IdentityPoolId: { Ref: 'IdentityPool' },
+    Roles: { authenticated: { 'Fn::GetAtt': ['FilesAuthRole', 'Arn'] } },
   },
 };
 
@@ -454,13 +503,13 @@ const template = {
       Description: 'AppSync API id.',
       Value: { 'Fn::GetAtt': ['GraphQLApi', 'ApiId'] },
     },
-    FinancialsBucketName: {
-      Description: 'S3 bucket for financial files — set as MB_S3_BUCKET.',
-      Value: { Ref: 'FinancialsBucket' },
+    FilesBucketName: {
+      Description: 'S3 bucket for uploaded files + minute books — set as MB_S3_BUCKET.',
+      Value: { Ref: 'FilesBucket' },
     },
     IdentityPoolId: {
       Description: 'Cognito Identity Pool id — set as MB_IDENTITY_POOL_ID.',
-      Value: { Ref: 'FinancialsIdentityPool' },
+      Value: { Ref: 'IdentityPool' },
     },
     Region: {
       Description: 'Region the API is deployed in (for config.appsync.region).',
