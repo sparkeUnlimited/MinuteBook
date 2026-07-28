@@ -15,11 +15,22 @@ export default {
   userPoolId: '',            // e.g. 'us-east-1_ABC123DEF'
   userPoolClientId: '',      // an app client WITHOUT a client secret (public web client)
 
+  // Cognito Identity Pool id (for file uploads to S3). From the CloudFormation
+  // stack Outputs (IdentityPoolId). Looks like 'us-east-1:xxxxxxxx-...'.
+  identityPoolId: '',
+
   // The AppSync GraphQL API for minute-book data. Provision with the Amplify
   // CLI using schema/schema.graphql and Cognito user-pool auth (see README),
   // then paste the endpoint here.
   appsync: {
     endpoint: '',            // e.g. 'https://xxxx.appsync-api.us-east-1.amazonaws.com/graphql'
+    region: 'us-east-1',
+  },
+
+  // S3 bucket for file uploads. From the CloudFormation stack Outputs
+  // (FilesBucketName). Leave blank to disable uploads (local mode).
+  storage: {
+    bucket: '',              // e.g. 'minutebook-backend-files-123456789012'
     region: 'us-east-1',
   },
 };

@@ -2,7 +2,8 @@
 // view (single form / repeatable rows / grouped / registry), and handles
 // save, delete, and PDF generation. Single-page app with hash routing.
 
-import { SECTIONS, NAV_ORDER } from './schema.js';
+import { SECTIONS, NAV_ORDER, DOC_CATEGORIES } from './schema.js';
+import { storage, buildKey } from './storage.js';
 import {
   store, hydrate, single, saveRecord, deleteRecord, onChange,
   corps, activeCorp, setActiveCorp, createCorp,
@@ -459,6 +460,166 @@ async function createNewAnnual() {
   navigate('annual');
 }
 
+// --- Documents / uploads view ----------------------------------------------
+
+function categoryOptions(scope) {
+  return (DOC_CATEGORIES[scope] || []).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+}
+
+function renderDocuments() {
+  const docs = store.Document || [];
+  $main.innerHTML = `
+    ${sectionHeader(SECTIONS.documents)}
+    <form class="card" id="upload-form">
+      <div class="field">
+        <label for="doc-scope">Type</label>
+        <select id="doc-scope">
+          <option value="year">Year-specific (tax return, financial statements…)</option>
+          <option value="corporate">Corporate (articles, certificates…)</option>
+        </select>
+      </div>
+      <div class="field" id="doc-year-field">
+        <label for="doc-year">Fiscal Year</label>
+        <input id="doc-year" type="text" placeholder="e.g. 2025" />
+      </div>
+      <div class="field">
+        <label for="doc-category">Category</label>
+        <select id="doc-category">${categoryOptions('year')}</select>
+      </div>
+      <div class="field">
+        <label for="doc-file">File</label>
+        <input id="doc-file" type="file" />
+      </div>
+      <label class="chk"><input type="checkbox" id="doc-attest" />
+        <span>I confirm these documents are complete and correct.</span></label>
+      <div class="card-actions">
+        <button type="submit" class="btn btn-primary" id="doc-upload-btn">Upload</button>
+        <span id="doc-upload-status" class="field-help"></span>
+      </div>
+    </form>
+    <div id="doc-list"></div>
+  `;
+
+  const scopeSel = document.getElementById('doc-scope');
+  const yearField = document.getElementById('doc-year-field');
+  const catSel = document.getElementById('doc-category');
+  scopeSel.addEventListener('change', () => {
+    const scope = scopeSel.value;
+    yearField.style.display = scope === 'year' ? '' : 'none';
+    catSel.innerHTML = categoryOptions(scope);
+  });
+
+  document.getElementById('upload-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    handleUpload();
+  });
+
+  renderDocList(docs);
+}
+
+function renderDocList(docs) {
+  const list = document.getElementById('doc-list');
+  if (!list) return;
+  if (!docs.length) {
+    list.innerHTML = `<p class="empty">No documents uploaded yet.</p>`;
+    return;
+  }
+  const corporate = docs.filter((d) => d.scope === 'corporate');
+  const byYear = {};
+  docs.filter((d) => d.scope === 'year').forEach((d) => {
+    (byYear[d.fiscalYear || 'Unfiled'] ||= []).push(d);
+  });
+  const years = Object.keys(byYear).sort((a, b) => String(b).localeCompare(String(a)));
+
+  const row = (d) => `
+    <tr>
+      <td>${esc(d.category || '—')}</td>
+      <td>${esc(d.fileName || '—')}</td>
+      <td>${d.attestationConfirmed ? '<span class="pill pill-ok">Confirmed</span>' : '—'}</td>
+      <td class="doc-cell-actions">
+        <button class="btn btn-doc" data-dl="${esc(d.id)}">Download</button>
+        <button class="btn btn-danger" data-del="${esc(d.id)}">Delete</button>
+      </td>
+    </tr>`;
+  const table = (rows) => `<table class="registry-table"><thead><tr>
+      <th>Category</th><th>File</th><th>Attestation</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+
+  let html = '';
+  if (corporate.length) html += `<h3 class="doc-h3">Corporate documents</h3>${table(corporate.map(row).join(''))}`;
+  for (const y of years) html += `<h3 class="doc-h3">FY ${esc(y)}</h3>${table(byYear[y].map(row).join(''))}`;
+  list.innerHTML = html;
+
+  list.querySelectorAll('[data-dl]').forEach((b) => b.addEventListener('click', () => downloadDoc(b.getAttribute('data-dl'))));
+  list.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => deleteDoc(b.getAttribute('data-del'))));
+}
+
+async function handleUpload() {
+  const scope = document.getElementById('doc-scope').value;
+  const fiscalYear = document.getElementById('doc-year').value.trim();
+  const category = document.getElementById('doc-category').value;
+  const fileEl = document.getElementById('doc-file');
+  const attest = document.getElementById('doc-attest').checked;
+  const file = fileEl.files[0];
+  const btn = document.getElementById('doc-upload-btn');
+  const status = document.getElementById('doc-upload-status');
+
+  if (!file) { toast('Choose a file to upload.', 'error'); return; }
+  if (scope === 'year' && !fiscalYear) { toast('Enter the fiscal year.', 'error'); return; }
+
+  btn.disabled = true; btn.textContent = 'Uploading…'; status.textContent = '';
+  try {
+    const corpId = store.activeCorpId;
+    const key = buildKey({ corpId, scope, fiscalYear, category, fileName: file.name });
+    await storage.upload(key, file);
+    // Only look up the signed-in email when auth is configured (avoids loading
+    // Amplify in local mode).
+    const email = (await authEnabled()) ? await currentEmail().catch(() => null) : null;
+    const now = new Date().toISOString();
+    await saveRecord('Document', {
+      scope, fiscalYear: scope === 'year' ? fiscalYear : null, category,
+      title: file.name, fileName: file.name, s3Key: key,
+      contentType: file.type, size: file.size, uploadedBy: email || 'local',
+      attestationConfirmed: attest,
+      attestationBy: attest ? (email || 'local') : null,
+      attestationAt: attest ? now : null,
+    });
+    toast('Uploaded.', 'success');
+    fileEl.value = '';
+    document.getElementById('doc-attest').checked = false;
+    renderDocList(store.Document);
+  } catch (err) {
+    console.error(err);
+    toast(`Upload failed: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Upload';
+  }
+}
+
+async function downloadDoc(id) {
+  const d = store.Document.find((r) => r.id === id);
+  if (!d) return;
+  try {
+    const url = await storage.url(d.s3Key);
+    if (!url) { toast('File not found.', 'error'); return; }
+    const a = document.createElement('a');
+    a.href = url; a.download = d.fileName || 'document'; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (err) { toast(`Couldn't open file: ${err.message}`, 'error'); }
+}
+
+async function deleteDoc(id) {
+  const d = store.Document.find((r) => r.id === id);
+  if (!d) return;
+  if (!confirm(`Delete "${d.fileName}"? This removes the file and its record.`)) return;
+  try {
+    await storage.remove(d.s3Key).catch((e) => console.warn('storage remove:', e));
+    await deleteRecord('Document', id);
+    renderDocList(store.Document);
+    toast('Deleted.', 'info');
+  } catch (err) { toast(`Couldn't delete: ${err.message}`, 'error'); }
+}
+
 // --- top-level render ------------------------------------------------------
 
 function render(route) {
@@ -476,6 +637,7 @@ function render(route) {
     return;
   }
 
+  if (section.view === 'documents') return renderDocuments();
   if (section.view === 'registry') return renderRegistry();
   if (section.groups) return renderGroups(route, section);
   if (section.repeatable) return renderRepeatable(route, section);

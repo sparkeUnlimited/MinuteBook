@@ -15,6 +15,9 @@
 //   MB_USER_POOL_CLIENT_ID  e.g. 6sdk3tr7ou04ggjv0pdvclq36i   (public, no secret)
 //   MB_APPSYNC_ENDPOINT     (optional, blank until the API exists)
 //   MB_APPSYNC_REGION       (optional, defaults to MB_REGION)
+//   MB_S3_BUCKET            (optional, for file uploads — from stack Outputs)
+//   MB_S3_REGION            (optional, defaults to MB_REGION)
+//   MB_IDENTITY_POOL_ID     (optional, for file uploads — from stack Outputs)
 
 import { writeFileSync } from 'node:fs';
 
@@ -24,6 +27,9 @@ const {
   MB_USER_POOL_CLIENT_ID = '',
   MB_APPSYNC_ENDPOINT = '',
   MB_APPSYNC_REGION = '',
+  MB_S3_BUCKET = '',
+  MB_S3_REGION = '',
+  MB_IDENTITY_POOL_ID = '',
 } = process.env;
 
 const contents = `// Generated at build time by scripts/gen-config.mjs. Do not edit by hand in CI.
@@ -31,9 +37,14 @@ export default {
   region: ${JSON.stringify(MB_REGION)},
   userPoolId: ${JSON.stringify(MB_USER_POOL_ID)},
   userPoolClientId: ${JSON.stringify(MB_USER_POOL_CLIENT_ID)},
+  identityPoolId: ${JSON.stringify(MB_IDENTITY_POOL_ID)},
   appsync: {
     endpoint: ${JSON.stringify(MB_APPSYNC_ENDPOINT)},
     region: ${JSON.stringify(MB_APPSYNC_REGION || MB_REGION)},
+  },
+  storage: {
+    bucket: ${JSON.stringify(MB_S3_BUCKET)},
+    region: ${JSON.stringify(MB_S3_REGION || MB_REGION)},
   },
 };
 `;
@@ -46,4 +57,6 @@ console.log('[gen-config] wrote js/config.js', {
   userPoolId: MB_USER_POOL_ID ? '(set)' : '(EMPTY — login gate will be OFF)',
   userPoolClientId: MB_USER_POOL_CLIENT_ID ? '(set)' : '(EMPTY — login gate will be OFF)',
   appsyncEndpoint: MB_APPSYNC_ENDPOINT ? '(set)' : '(empty — data stays on-device)',
+  s3Bucket: MB_S3_BUCKET ? '(set)' : '(empty — file uploads off)',
+  identityPoolId: MB_IDENTITY_POOL_ID ? '(set)' : '(empty — file uploads off)',
 });

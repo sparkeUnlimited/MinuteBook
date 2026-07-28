@@ -156,6 +156,13 @@ textarea { resize: vertical; }
 .alert { padding: 12px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; }
 .alert-overdue { background: #fdecea; color: var(--danger); border: 1px solid #f3c2bd; }
 
+/* --- Documents view --- */
+#doc-list .doc-h3 { font-size: 15px; margin: 22px 0 8px; color: var(--ink); }
+.doc-cell-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.doc-cell-actions .btn { padding: 5px 11px; font-size: 13px; }
+#upload-form .chk { margin: 6px 0 4px; }
+#doc-file { padding: 7px; }
+
 /* --- Toast --- */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);

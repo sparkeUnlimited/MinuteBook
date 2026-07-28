@@ -25,6 +25,12 @@ export async function backendEnabled() {
   return !!(c && c.appsync && c.appsync.endpoint);
 }
 
+// File uploads need both an S3 bucket and an Identity Pool (for browser creds).
+export async function storageEnabled() {
+  const c = await getConfig();
+  return !!(c && c.identityPoolId && c.storage && c.storage.bucket);
+}
+
 let _configured = null;
 // Configure Amplify once from config.js. Only includes the Auth / API blocks
 // that are actually populated, so partial setups (login-only, no API) work.
@@ -39,6 +45,9 @@ export function ensureAmplifyConfigured() {
           Cognito: {
             userPoolId: c.userPoolId,
             userPoolClientId: c.userPoolClientId,
+            // Identity pool: exchanges the user-pool token for AWS creds so the
+            // browser can read/write S3 (file uploads).
+            ...(c.identityPoolId ? { identityPoolId: c.identityPoolId } : {}),
           },
         };
       }
@@ -48,6 +57,14 @@ export function ensureAmplifyConfigured() {
             endpoint: c.appsync.endpoint,
             region: c.appsync.region || c.region,
             defaultAuthMode: 'userPool',
+          },
+        };
+      }
+      if (c.storage && c.storage.bucket) {
+        conf.Storage = {
+          S3: {
+            bucket: c.storage.bucket,
+            region: c.storage.region || c.region,
           },
         };
       }

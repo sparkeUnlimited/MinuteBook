@@ -17,6 +17,18 @@ export const JURISDICTIONS = ['Ontario', 'Canada (Federal)'];
 export const DIRECTOR_TITLES = ['President', 'Secretary', 'Treasurer', 'CEO', 'CFO', 'Chair'];
 export const ACCOUNT_TYPES = ['Chequing', 'Savings', 'USD', 'Line of Credit', 'Credit Card'];
 
+// Document categories by scope (for the Documents / uploads section).
+export const DOC_CATEGORIES = {
+  corporate: [
+    'Articles of Incorporation', 'Certificate of Incorporation', 'By-laws',
+    'Certificate / Endorsement (Master, Red Seal)', 'Shareholder Agreement', 'Other',
+  ],
+  year: [
+    'Financial Statements', 'Tax Return (T2)', 'Notice to Reader',
+    'Accountant Package', 'Working Papers', 'GST/HST', 'Other',
+  ],
+};
+
 export const SECTIONS = {
   'corp-info': {
     label: 'Corporation Info',
@@ -131,6 +143,11 @@ export const SECTIONS = {
     ],
   },
 
+  'documents': {
+    label: 'Documents',
+    view: 'documents', // custom view — file uploads
+  },
+
   'registry': {
     label: 'Document Registry',
     view: 'registry', // custom view, not a generic form
@@ -138,5 +155,5 @@ export const SECTIONS = {
 };
 
 export const NAV_ORDER = [
-  'corp-info', 'directors', 'shares', 'banking', 'annual', 'adhoc', 'registry',
+  'corp-info', 'directors', 'shares', 'banking', 'annual', 'adhoc', 'documents', 'registry',
 ];
