@@ -111,6 +111,8 @@ const MODELS = {
     writeGroups: ['Executives', 'Admin', 'Finance'],
     fields: {
       scope: 'String', fiscalYear: 'String', category: 'String', title: 'String',
+      // Plain-English note of what the file is (accountant filenames are cryptic).
+      description: 'String',
       fileName: 'String', s3Key: 'String', contentType: 'String', size: 'Int',
       uploadedBy: 'String',
       attestationConfirmed: 'Boolean', attestationBy: 'String', attestationAt: 'AWSDateTime',

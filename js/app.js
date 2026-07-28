@@ -462,8 +462,10 @@ async function createNewAnnual() {
 
 // --- Documents / uploads view ----------------------------------------------
 
+const CUSTOM_CAT = '__custom__';
 function categoryOptions(scope) {
-  return (DOC_CATEGORIES[scope] || []).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  const opts = (DOC_CATEGORIES[scope] || []).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  return `${opts}<option value="${CUSTOM_CAT}">＋ Custom section…</option>`;
 }
 
 function renderDocuments() {
@@ -483,12 +485,20 @@ function renderDocuments() {
         <input id="doc-year" type="text" placeholder="e.g. 2025" />
       </div>
       <div class="field">
-        <label for="doc-category">Category</label>
+        <label for="doc-category">Section</label>
         <select id="doc-category">${categoryOptions('year')}</select>
+      </div>
+      <div class="field" id="doc-category-custom-field" style="display:none">
+        <label for="doc-category-custom">New section name</label>
+        <input id="doc-category-custom" type="text" placeholder="e.g. Balance Sheets" />
       </div>
       <div class="field">
         <label for="doc-file">File</label>
         <input id="doc-file" type="file" />
+      </div>
+      <div class="field">
+        <label for="doc-description">Description</label>
+        <input id="doc-description" type="text" placeholder="Plain-English: what is this file? (e.g. Year-end balance sheet)" />
       </div>
       <label class="chk"><input type="checkbox" id="doc-attest" />
         <span>I confirm these documents are complete and correct.</span></label>
@@ -503,11 +513,15 @@ function renderDocuments() {
   const scopeSel = document.getElementById('doc-scope');
   const yearField = document.getElementById('doc-year-field');
   const catSel = document.getElementById('doc-category');
+  const customField = document.getElementById('doc-category-custom-field');
+  const toggleCustom = () => { customField.style.display = catSel.value === CUSTOM_CAT ? '' : 'none'; };
   scopeSel.addEventListener('change', () => {
     const scope = scopeSel.value;
     yearField.style.display = scope === 'year' ? '' : 'none';
     catSel.innerHTML = categoryOptions(scope);
+    toggleCustom();
   });
+  catSel.addEventListener('change', toggleCustom);
 
   document.getElementById('upload-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -534,7 +548,10 @@ function renderDocList(docs) {
   const row = (d) => `
     <tr>
       <td>${esc(d.category || '—')}</td>
-      <td>${esc(d.fileName || '—')}</td>
+      <td>
+        <div class="doc-desc">${esc(d.description || '(no description)')}</div>
+        <div class="doc-fname">${esc(d.fileName || '')}</div>
+      </td>
       <td>${d.attestationConfirmed ? '<span class="pill pill-ok">Confirmed</span>' : '—'}</td>
       <td class="doc-cell-actions">
         <button class="btn btn-doc" data-dl="${esc(d.id)}">Download</button>
@@ -542,7 +559,7 @@ function renderDocList(docs) {
       </td>
     </tr>`;
   const table = (rows) => `<table class="registry-table"><thead><tr>
-      <th>Category</th><th>File</th><th>Attestation</th><th></th></tr></thead>
+      <th>Section</th><th>Document</th><th>Attestation</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table>`;
 
   let html = '';
@@ -557,7 +574,8 @@ function renderDocList(docs) {
 async function handleUpload() {
   const scope = document.getElementById('doc-scope').value;
   const fiscalYear = document.getElementById('doc-year').value.trim();
-  const category = document.getElementById('doc-category').value;
+  let category = document.getElementById('doc-category').value;
+  const description = document.getElementById('doc-description').value.trim();
   const fileEl = document.getElementById('doc-file');
   const attest = document.getElementById('doc-attest').checked;
   const file = fileEl.files[0];
@@ -566,6 +584,10 @@ async function handleUpload() {
 
   if (!file) { toast('Choose a file to upload.', 'error'); return; }
   if (scope === 'year' && !fiscalYear) { toast('Enter the fiscal year.', 'error'); return; }
+  if (category === CUSTOM_CAT) {
+    category = document.getElementById('doc-category-custom').value.trim();
+    if (!category) { toast('Name the custom section.', 'error'); return; }
+  }
 
   btn.disabled = true; btn.textContent = 'Uploading…'; status.textContent = '';
   try {
@@ -578,7 +600,8 @@ async function handleUpload() {
     const now = new Date().toISOString();
     await saveRecord('Document', {
       scope, fiscalYear: scope === 'year' ? fiscalYear : null, category,
-      title: file.name, fileName: file.name, s3Key: key,
+      title: file.name, description: description || null,
+      fileName: file.name, s3Key: key,
       contentType: file.type, size: file.size, uploadedBy: email || 'local',
       attestationConfirmed: attest,
       attestationBy: attest ? (email || 'local') : null,
@@ -586,6 +609,7 @@ async function handleUpload() {
     });
     toast('Uploaded.', 'success');
     fileEl.value = '';
+    document.getElementById('doc-description').value = '';
     document.getElementById('doc-attest').checked = false;
     renderDocList(store.Document);
   } catch (err) {
