@@ -5,19 +5,22 @@ This folder provisions the cloud backend for the Minute Book app:
 - **1 AppSync GraphQL API**, authorized by your **existing Cognito user pool**
   (`us-east-1_iQ2q3z7ep`).
 - **13 DynamoDB tables** (one per model, on-demand billing).
-- **65 resolvers** (get/list/create/update/delete per model), AppSync JS runtime,
-  talking directly to DynamoDB.
-- **Two Cognito groups** — `Owners` and `Accountants` — added to your pool.
-- **Group-based write auth** via `@aws_auth`: reads are open to any signed-in
-  user, but only `Owners` can write minute-book data; `Document` uploads are
-  writable by `Owners` and `Accountants`.
+- **65 resolvers** (get/list/create/update/delete per model), AppSync JS runtime.
+- **Group-based auth** via `@aws_auth`, using your Cognito groups
+  (**Executives, Finance, Admin, Users** — managed in Cognito, *not* created by
+  this template):
+  - **Edit the minute book** → `Executives`, `Admin`.
+  - **Upload/manage financial documents** → `Executives`, `Admin`, `Finance`.
+  - **Read** → any signed-in user, **except** banking details and the ISC
+    register (dates of birth), which are limited to `Executives`/`Admin`/`Finance`
+    (so `Users` can't see them).
 - **1 S3 bucket** for uploaded files + compiled minute books, and a **Cognito
-  Identity Pool** so the browser can read/write S3 with temporary, prefix-scoped
-  credentials (`files/*`, `minute-book/*`).
+  Identity Pool** for browser S3 access scoped to `files/*` and `minute-book/*`.
 
 Files:
 
-- `generate-template.mjs` — generator. Edit the model list here, then re-run.
+- `generate-template.mjs` — generator. Edit the model list / group mapping here,
+  then re-run.
 - `minutebook-appsync.json` — the generated CloudFormation template you deploy.
 
 Regenerate after any change:
@@ -26,58 +29,52 @@ Regenerate after any change:
 node infra/generate-template.mjs
 ```
 
-## ⚠️ Do this FIRST: put yourself in the `Owners` group
+## Deploy: run this as a STACK UPDATE (don't delete anything)
 
-Once deployed, **only `Owners` can edit the minute book**. The stack *creates*
-the group but can't add you to it. So the moment the app points at this backend,
-you must already be in `Owners` or you'll have read-only access to your own app.
+Your v1 stack is already live, so apply v2 as an update — your existing tables
+and data are preserved (v2 keeps all v1 logical IDs and only adds to them).
 
-Order: **deploy the stack → add your user to `Owners` → then set the Amplify env
-vars.** (Create the accountant user and add them to `Accountants` at the same
-time.) In the **Cognito** console → your pool → **Groups** → `Owners` → **Add
-user**.
+1. CloudFormation console (region **us-east-1**) → select the `minutebook-backend`
+   stack → **Update**.
+2. **Replace existing template → Upload a template file** → pick
+   `infra/minutebook-appsync.json` → **Next**.
+3. Parameters are pre-filled (pool id, app client id, region) → **Next**.
+4. Re-check **"I acknowledge that AWS CloudFormation might create IAM
+   resources"** → **Next**.
+5. Review the **change set**: it should be all **Add** (new tables, S3, Identity
+   Pool, resolvers) and **Modify** (the GraphQL schema) — **no Delete/Replace on
+   your existing `*Table` resources**. If you see a Replace on a data table,
+   stop and tell me.
+6. **Submit** and wait for **UPDATE_COMPLETE**.
+7. Open the **Outputs** tab and copy `FilesBucketName` and `IdentityPoolId`
+   (the `GraphQLApiUrl` is unchanged from v1).
 
-## Deploy it (AWS console — no local credentials needed)
+### Group membership (no lockout for you)
 
-1. Open the **CloudFormation** console in region **us-east-1**.
-2. **Create stack → With new resources (standard)**.
-3. **Upload a template file** → pick `infra/minutebook-appsync.json` → **Next**.
-4. **Stack name**: `minutebook-backend` (table/bucket names are prefixed with
-   this). Parameters are pre-filled with your pool id, app client id, and region
-   → **Next**.
-5. Check **"I acknowledge that AWS CloudFormation might create IAM resources"**
-   (the template creates service/auth roles) → **Submit**.
-6. Wait for **CREATE_COMPLETE** (~3–4 min).
-7. Open the **Outputs** tab and copy `GraphQLApiUrl`, `FilesBucketName`, and
-   `IdentityPoolId`.
+Because editing is gated to `Executives`/`Admin` and **you're in both**, you keep
+full access — nothing to do. Just make sure:
+- Your **accountant** is in the **`Finance`** group (to upload financial docs and
+  read banking/financials).
+- Anyone who should be view-only is in **`Users`** (they won't see banking/ISC).
 
 ## Point the app at it (Amplify env vars)
 
-In the **Amplify** console → your app → **App settings → Environment variables**,
-add:
+`MB_APPSYNC_ENDPOINT` is already set from v1. Add the two new ones:
 
-- `MB_APPSYNC_ENDPOINT` = `GraphQLApiUrl`
-- `MB_S3_BUCKET` = `FilesBucketName`
-- `MB_IDENTITY_POOL_ID` = `IdentityPoolId`
-- `MB_APPSYNC_REGION` = `us-east-1` (optional; defaults to `MB_REGION`)
+- `MB_S3_BUCKET` = `FilesBucketName` (from Outputs)
+- `MB_IDENTITY_POOL_ID` = `IdentityPoolId` (from Outputs)
 
-Then merge to `main` to redeploy. The build writes `js/config.js`, and the app
-switches from localStorage to DynamoDB + S3. For local testing, put the same
-values in your local `js/config.js`.
+Then redeploy `main`. For local testing, put the same values in your local
+`js/config.js`.
 
 ## Notes
 
-- **Auth model:** reads are open to any pool user; writes are group-gated
-  (`Owners` for minute-book data, `Owners`+`Accountants` for `Document`
-  uploads). Enforced server-side; the UI also hides edit controls for
-  accountants.
 - **S3 layout:** `files/{year}/{category}/…` and `files/corporate/{category}/…`
   for uploads; `minute-book/{year}/…` for compiled minute-book PDFs.
-- **Registers included but UI to follow:** `Officer`, `SignificantControlPerson`
+- **Registers included, UI to follow:** `Officer`, `SignificantControlPerson`
   (ISC/transparency register), and `ShareTransfer` tables ship now so no second
   backend deploy is needed; their screens come in a later client phase.
-- **Deleting the stack** removes the tables **and their data** (and the S3
-  bucket must be emptied first). Back up anything you want to keep.
-- **Migrating existing local data:** records entered before the switch live in
-  that browser's localStorage. Re-enter them, or ask for the one-time
-  "push local data to the cloud" helper.
+- **Changing the group mapping** later: edit the `writeGroups` / `readGroups` in
+  `generate-template.mjs`, regenerate, and run another stack update.
+- **Deleting the stack** removes the tables **and their data**, and the S3 bucket
+  must be emptied first. Back up anything you want to keep.

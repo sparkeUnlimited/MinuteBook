@@ -6,14 +6,16 @@
 //
 // Design:
 //   - One DynamoDB table per model (PK = id, on-demand billing).
-//   - One AppSync API with Cognito user-pool auth. Reads are open to any
-//     authenticated user; writes are gated by Cognito group via @aws_auth
-//     (minute book = Owners only; FinancialDocument = Owners + Accountants).
+//   - One AppSync API with Cognito user-pool auth. Writes are gated by Cognito
+//     group via @aws_auth (minute book = Executives + Admin; Document uploads =
+//     Executives + Admin + Finance). Reads are open to any authenticated user
+//     except banking + the ISC register, which are limited to Exec/Admin/Finance.
 //   - Generic APPSYNC_JS resolvers for get/list/create/update/delete, reused
 //     across every model (identical code, different data source).
-//   - Cognito groups (Owners, Accountants), an S3 bucket for financial files
-//     (folder per year), and a Cognito Identity Pool so the browser can
-//     upload/download to S3 with temporary, prefix-scoped credentials.
+//   - Groups (Executives/Finance/Admin/Users) are managed in Cognito, not here.
+//   - An S3 bucket for uploaded files + compiled minute books, and a Cognito
+//     Identity Pool so the browser can read/write S3 with temporary,
+//     prefix-scoped credentials.
 //
 // Regenerate and commit the JSON whenever the model list changes.
 
@@ -54,6 +56,8 @@ const MODELS = {
   },
   BankingInfo: {
     plural: 'BankingInfos',
+    // Sensitive: only management + finance may read banking details.
+    readGroups: ['Executives', 'Admin', 'Finance'],
     fields: {
       bankName: 'String', branchAddress: 'String',
       signingOfficers: '[String]', accountTypes: '[String]',
@@ -90,7 +94,7 @@ const MODELS = {
   // Attestation captures the accountant's "these are correct" confirmation.
   Document: {
     plural: 'Documents',
-    writeGroups: ['Owners', 'Accountants'],
+    writeGroups: ['Executives', 'Admin', 'Finance'],
     fields: {
       scope: 'String', fiscalYear: 'String', category: 'String', title: 'String',
       fileName: 'String', s3Key: 'String', contentType: 'String', size: 'Int',
@@ -118,6 +122,8 @@ const MODELS = {
   // register requirement for private corporations since 2023).
   SignificantControlPerson: {
     plural: 'SignificantControlPeople',
+    // Sensitive PII (includes dates of birth): restrict reads.
+    readGroups: ['Executives', 'Admin', 'Finance'],
     fields: {
       name: 'String', address: 'String', dateOfBirth: 'AWSDate',
       controlType: 'String', controlDescription: 'String',
@@ -136,9 +142,13 @@ const MODELS = {
   },
 };
 
-// Which Cognito groups may create/update/delete a model. Reads are open to any
-// authenticated user (the accountant sees the whole minute book, read-only).
-const DEFAULT_WRITE_GROUPS = ['Owners'];
+// Cognito group authorization. Groups are managed in the Cognito console
+// (Executives, Finance, Admin, Users) — this template references them, it does
+// NOT create them.
+//   - Writes default to Executives + Admin (management edits the minute book).
+//   - Reads are open to any authenticated user EXCEPT models that set
+//     `readGroups` (banking + ISC register), which restrict who can view them.
+const DEFAULT_WRITE_GROUPS = ['Executives', 'Admin'];
 
 // --- GraphQL SDL -----------------------------------------------------------
 
@@ -156,8 +166,12 @@ function typeBlock(model, def) {
 
 function buildSchemaSDL() {
   const types = Object.entries(MODELS).map(([m, d]) => typeBlock(m, d)).join('\n\n');
-  const queries = Object.entries(MODELS).map(([m, d]) =>
-    `  get${m}(id: ID!): ${m}\n  list${d.plural}(limit: Int, nextToken: String): ${m}Connection`).join('\n');
+  const queries = Object.entries(MODELS).map(([m, d]) => {
+    const ra = d.readGroups
+      ? ` @aws_auth(cognito_groups: [${d.readGroups.map((g) => `"${g}"`).join(', ')}])`
+      : '';
+    return `  get${m}(id: ID!): ${m}${ra}\n  list${d.plural}(limit: Int, nextToken: String): ${m}Connection${ra}`;
+  }).join('\n');
   const mutations = Object.entries(MODELS).map(([m, d]) => {
     const groups = (d.writeGroups || DEFAULT_WRITE_GROUPS).map((g) => `"${g}"`).join(', ');
     const a = ` @aws_auth(cognito_groups: [${groups}])`;
@@ -355,28 +369,9 @@ for (const [model, def] of Object.entries(MODELS)) {
   }
 }
 
-// --- Cognito groups (roles) ------------------------------------------------
-// Added to the EXISTING user pool. Owners = full access; Accountants =
-// read-only minute book + manage financial documents. You add users to these
-// groups in the Cognito console.
-resources.OwnersGroup = {
-  Type: 'AWS::Cognito::UserPoolGroup',
-  Properties: {
-    GroupName: 'Owners',
-    UserPoolId: { Ref: 'UserPoolId' },
-    Description: 'Full read/write access to the minute book.',
-    Precedence: 1,
-  },
-};
-resources.AccountantsGroup = {
-  Type: 'AWS::Cognito::UserPoolGroup',
-  Properties: {
-    GroupName: 'Accountants',
-    UserPoolId: { Ref: 'UserPoolId' },
-    Description: 'Read-only on the minute book; can manage financial documents.',
-    Precedence: 10,
-  },
-};
+// NOTE: Cognito groups (Executives, Finance, Admin, Users) are managed in the
+// Cognito console, not here. The GraphQL schema's @aws_auth directives
+// reference them by name. Users must be members of the appropriate group.
 
 // --- S3 bucket for uploaded files + compiled minute books -------------------
 //   files/{year}/{category}/...   files/corporate/{category}/...   (uploads)
@@ -524,4 +519,5 @@ writeFileSync(out, JSON.stringify(template, null, 2) + '\n');
 const resourceCount = Object.keys(resources).length;
 console.log(`[generate-template] wrote infra/minutebook-appsync.json`);
 console.log(`  models: ${Object.keys(MODELS).length}, resolvers: ${Object.keys(MODELS).length * OPS.length}, total resources: ${resourceCount}`);
-console.log(`  added: Owners/Accountants groups, S3 bucket, Cognito Identity Pool + auth role`);
+console.log(`  write groups: Executives/Admin (+Finance for Documents); read-restricted: BankingInfo, SignificantControlPerson`);
+console.log(`  groups are managed in Cognito (not created here)`);
