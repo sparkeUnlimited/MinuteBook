@@ -22,11 +22,12 @@ export const OFFICES = ['President', 'Secretary', 'Treasurer', 'CEO', 'CFO', 'CO
 export const DOC_CATEGORIES = {
   corporate: [
     'Articles of Incorporation', 'Certificate of Incorporation', 'By-laws',
+    'Registered Office and Directors', 'Individuals with Significant Control',
     'Certificate / Endorsement (Master, Red Seal)', 'Shareholder Agreement', 'Other',
   ],
   year: [
-    'Financial Statements', 'Tax Return (T2)', 'Notice to Reader',
-    'Accountant Package', 'Working Papers', 'GST/HST', 'Other',
+    'Financial Statements', 'Tax Return (T2)', 'Notice of Assessment', 'T183',
+    'Notice to Reader', 'Accountant Package', 'Working Papers', 'GST/HST', 'Other',
   ],
 };
 
