@@ -222,7 +222,10 @@ textarea { resize: vertical; }
 .mb-part-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; margin: 0 0 12px; }
 /* nested full documents keep their content styling but drop the outer frame */
 .mb-book .resolution-doc { width: auto; padding: 0; }
-.mb-book .resolution-doc .doc-head { border-bottom-width: 1px; }
+/* inside the compiled book, sections carry only their all-caps heading — the
+   per-document corp name/number header is redundant (it lives in the page
+   footer and on the cover) */
+.mb-book .doc-head { display: none; }
 
 /* --- Toast --- */
 .toast {
