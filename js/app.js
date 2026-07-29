@@ -776,7 +776,9 @@ async function handleMinuteBook() {
   btn.disabled = true; btn.textContent = 'Compiling…';
   try {
     const { html, label } = compileMinuteBook(fy);
-    const fname = `Annual_Minute_Book_FY${fy}.pdf`;
+    const corpName = (activeCorp()?.legalName || 'Corporation')
+      .replace(/[^\w.\- ]+/g, ' ').replace(/[\s_]+/g, '_').replace(/^_+|_+$/g, '');
+    const fname = `${corpName}_Annual_Minute_Book_FY${fy}.pdf`;
     const blob = await buildPdf(html, fname, { locked: true });
 
     // Store in the year's own minute-book folder for this corporation.
