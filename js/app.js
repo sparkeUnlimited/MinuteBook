@@ -855,6 +855,27 @@ async function renderSignOut() {
   });
 }
 
+// Mobile drawer: hamburger toggles the sidebar; backdrop / navigation closes it.
+function wireMobileNav() {
+  const toggle = document.getElementById('menu-toggle');
+  const backdrop = document.getElementById('backdrop');
+  const sidebar = document.querySelector('.sidebar');
+  if (!toggle || !backdrop || !sidebar) return;
+  const set = (open) => {
+    document.body.classList.toggle('nav-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    toggle.textContent = open ? '✕' : '☰';
+  };
+  toggle.addEventListener('click', () => set(!document.body.classList.contains('nav-open')));
+  backdrop.addEventListener('click', () => set(false));
+  window.addEventListener('hashchange', () => set(false));
+  // Close on nav clicks (covers re-clicking the active link, which doesn't
+  // fire hashchange) and on corp switching.
+  sidebar.addEventListener('click', (e) => { if (e.target.closest('.nav a')) set(false); });
+  sidebar.addEventListener('change', (e) => { if (e.target.closest('.corp-select')) set(false); });
+}
+
 async function boot() {
   $main.innerHTML = '<p class="loading">Loading…</p>';
 
@@ -873,6 +894,7 @@ async function boot() {
     console.error(err);
     toast('Failed to load data. Working from an empty state.', 'error');
   }
+  wireMobileNav();
   onRoute(render);
   start();
   renderSignOut();
