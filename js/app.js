@@ -696,7 +696,9 @@ async function deleteDoc(id) {
   try {
     await storage.remove(d.s3Key).catch((e) => console.warn('storage remove:', e));
     await deleteRecord('Document', id);
-    renderDocList(store.Document);
+    // Refresh whichever view is showing the list (Documents or Minute Book).
+    if (currentRoute() === 'minute-book') renderMinuteBook();
+    else renderDocList(store.Document);
     toast('Deleted.', 'info');
   } catch (err) { toast(`Couldn't delete: ${err.message}`, 'error'); }
 }
@@ -739,7 +741,7 @@ function renderMinuteBook() {
   $main.innerHTML = `
     ${sectionHeader(SECTIONS['minute-book'])}
     <p class="intro">Compile everything recorded for a fiscal year — corporate info, registers,
-    signed resolutions and minutes, and the index of uploaded documents — into a single locked PDF,
+    signed resolutions and minutes, and the index of uploaded documents — into a single PDF,
     stored in that year's own folder in secure storage.</p>
     <form class="card" id="mb-form">
       <div class="field">
@@ -748,9 +750,9 @@ function renderMinuteBook() {
         <datalist id="mb-years">${years.map((y) => `<option value="${esc(y)}"></option>`).join('')}</datalist>
       </div>
       <div class="card-actions">
-        <button type="submit" class="btn btn-primary" id="mb-generate">📕 Compile, Lock &amp; Store</button>
+        <button type="submit" class="btn btn-primary" id="mb-generate">📕 Compile &amp; Store</button>
       </div>
-      <p class="field-help">The PDF is permission-locked (view/print, no editing) and uploaded to
+      <p class="field-help">The PDF is uploaded to
       <code>minute-book/&lt;year&gt;/</code> for this corporation. You'll also get a copy to save locally.</p>
     </form>
     <h3 class="doc-h3">Stored minute books</h3>
@@ -775,11 +777,12 @@ async function handleMinuteBook() {
   const prev = btn.textContent;
   btn.disabled = true; btn.textContent = 'Compiling…';
   try {
-    const { html, label } = compileMinuteBook(fy);
+    const { sections, footerText, label } = compileMinuteBook(fy);
     const corpName = (activeCorp()?.legalName || 'Corporation')
       .replace(/[^\w.\- ]+/g, ' ').replace(/[\s_]+/g, '_').replace(/^_+|_+$/g, '');
     const fname = `${corpName}_Annual_Minute_Book_FY${fy}.pdf`;
-    const blob = await buildPdf(html, fname, { locked: true });
+    // Not locked for now — the user wants to be able to mark it up further.
+    const blob = await buildPdf(sections, fname, { footerText });
 
     // Store in the year's own minute-book folder for this corporation.
     const corpId = store.activeCorpId;
@@ -800,7 +803,7 @@ async function handleMinuteBook() {
     const disposition = await saveOrShare(blob, fname);
     toast(disposition === 'cancelled'
       ? 'Minute book stored in the cloud (local save cancelled).'
-      : 'Minute book compiled, locked, and stored.', 'success');
+      : 'Minute book compiled and stored.', 'success');
     renderMinuteBook();
   } catch (err) {
     console.error(err);
@@ -852,6 +855,27 @@ async function renderSignOut() {
   });
 }
 
+// Mobile drawer: hamburger toggles the sidebar; backdrop / navigation closes it.
+function wireMobileNav() {
+  const toggle = document.getElementById('menu-toggle');
+  const backdrop = document.getElementById('backdrop');
+  const sidebar = document.querySelector('.sidebar');
+  if (!toggle || !backdrop || !sidebar) return;
+  const set = (open) => {
+    document.body.classList.toggle('nav-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    toggle.textContent = open ? '✕' : '☰';
+  };
+  toggle.addEventListener('click', () => set(!document.body.classList.contains('nav-open')));
+  backdrop.addEventListener('click', () => set(false));
+  window.addEventListener('hashchange', () => set(false));
+  // Close on nav clicks (covers re-clicking the active link, which doesn't
+  // fire hashchange) and on corp switching.
+  sidebar.addEventListener('click', (e) => { if (e.target.closest('.nav a')) set(false); });
+  sidebar.addEventListener('change', (e) => { if (e.target.closest('.corp-select')) set(false); });
+}
+
 async function boot() {
   $main.innerHTML = '<p class="loading">Loading…</p>';
 
@@ -870,6 +894,7 @@ async function boot() {
     console.error(err);
     toast('Failed to load data. Working from an empty state.', 'error');
   }
+  wireMobileNav();
   onRoute(render);
   start();
   renderSignOut();

@@ -13,7 +13,9 @@ export function signatureFor(docKey) {
 export const MINUTE_BOOK_CATEGORY = 'Annual Minute Book';
 
 // Assemble the compiled Annual Minute Book for a fiscal year.
-// Returns { html, label } — pure composition over the store.
+// Returns { sections, footerText, label } — pure composition over the store.
+// `sections` render one per page; `footerText` is the corp identity line
+// stamped at the foot of every page.
 export function compileMinuteBook(fiscalYear) {
   const d = templateData();
   const fy = String(fiscalYear);
@@ -28,8 +30,16 @@ export function compileMinuteBook(fiscalYear) {
   const signatures = {};
   for (const s of store.Signature) signatures[s.docKey] = s;
 
+  const corp = d.corp || {};
+  const footerText = [
+    corp.legalName || '',
+    corp.corporationNumber ? `Corporation No. ${corp.corporationNumber}` : '',
+    corp.jurisdiction || '',
+  ].filter(Boolean).join('  ·  ');
+
   return {
-    html: T.annualMinuteBook(d, { fiscalYear: fy, annual, meeting, adhocs, yearDocs, signatures }),
+    sections: T.annualMinuteBookSections(d, { fiscalYear: fy, annual, meeting, adhocs, yearDocs, signatures }),
+    footerText,
     label: `Annual Minute Book — FY ${fy}`,
   };
 }

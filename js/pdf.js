@@ -44,21 +44,48 @@ function mountForRender(html) {
   return host;
 }
 
-export async function buildPdf(html, filename, { locked = false } = {}) {
+// Build a PDF from one HTML string, or an array of them. With an array, each
+// entry starts on its own page (doc.html's y is document-absolute, so each
+// call is offset by the pages already rendered). `footerText` stamps the
+// corporation identity + page number at the foot of every page.
+export async function buildPdf(htmlOrSections, filename, { locked = false, footerText = '' } = {}) {
+  const sections = Array.isArray(htmlOrSections) ? htmlOrSections : [htmlOrSections];
   const doc = getDoc(locked ? lockOptions() : {});
-  const host = mountForRender(html);
-  const target = host.querySelector('.resolution-doc') || host;
-  try {
-    await doc.html(target, {
-      x: A4.marginX,
-      y: A4.marginTop,
-      width: A4.width - A4.marginX * 2,
-      windowWidth: target.scrollWidth || 720,
-      autoPaging: 'text',
-    });
-    return doc.output('blob');
-  } finally {
-    host.remove();
+  const pageH = doc.internal.pageSize.getHeight();
+
+  for (let i = 0; i < sections.length; i++) {
+    const host = mountForRender(sections[i]);
+    const target = host.querySelector('.resolution-doc') || host;
+    try {
+      if (i > 0) doc.addPage();
+      const startPage = doc.getNumberOfPages();
+      await doc.html(target, {
+        x: A4.marginX,
+        y: (startPage - 1) * pageH + A4.marginTop,
+        width: A4.width - A4.marginX * 2,
+        windowWidth: target.scrollWidth || 720,
+        autoPaging: 'text',
+      });
+    } finally {
+      host.remove();
+    }
+  }
+
+  if (footerText) stampFooters(doc, footerText);
+  return doc.output('blob');
+}
+
+function stampFooters(doc, footerText) {
+  const total = doc.getNumberOfPages();
+  const w = doc.internal.pageSize.getWidth();
+  const h = doc.internal.pageSize.getHeight();
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(110);
+    doc.text(footerText, w / 2, h - 8, { align: 'center' });
+    doc.text(`Page ${p} of ${total}`, w - A4.marginX, h - 8, { align: 'right' });
   }
 }
 
